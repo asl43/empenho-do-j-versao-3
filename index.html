@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Registro de Empenhos Operacionais</title>
+    <style>
+        /* ==================================== */
+        /* ESTILOS GERAIS */
+        /* ==================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Estilo do fundo principal da tela 1 */
+        #primeira-tela {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Estilo do fundo principal da tela 2 */
+        #segunda-tela {
+            background: #f4f7f6;
+            display: none; /* Inicia escondida */
+            padding: 30px 0;
+        }
+
+        /* ==================================== */
+        /* ESTILOS TELA 1 - FORMULÁRIO DE SELEÇÃO */
+        /* ==================================== */
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #1e3c72;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="datetime-local"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        input[type="datetime-local"]:focus {
+            outline: none;
+            border-color: #2a5298;
+            box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
+        }
+
+        .unidades-list {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 300px; 
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+
+        .unidades-group h4 {
+            color: #1e3c72;
+            font-size: 14px;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            padding-left: 5px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .unidade-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .unidade-item:hover {
+            background-color: #e6eefd;
+        }
+
+        .unidade-item input[type="checkbox"] {
+            margin-right: 10px;
+            min-width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .unidade-item label {
+            display: inline; 
+            font-weight: 400;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 0;
+            flex-grow: 1;
+        }
+
+        .unidades-list.error {
+            border-color: #f44336 !important;
+            box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.1);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(30, 60, 114, 0.3);
+        }
+
+        .error-message {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        /* ==================================== */
+        /* ESTILOS TELA 2 - PLANILHA DE REGISTRO */
+        /* ==================================== */
+
+        .header-page {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #1e3c72;
+        }
+
+        .spreadsheet-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+            margin: 0 auto 30px auto; /* Centraliza e adiciona margem */
+            max-width: 95%; /* Limita a largura para melhor visualização */
+            width: 100%;
+            overflow-x: auto; 
+        }
+
+        .spreadsheet-section h2 {
+            color: #2a5298;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1200px; 
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px 8px;
+            text-align: left;
+            font-size: 13px;
+            white-space: nowrap; 
+        }
+
+        th {
+            background-color: #e6eefd;
+            color: #1e3c72;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .input-cell, .select-cell {
+            padding: 0;
+            border: none; 
+        }
+        
+        input[type="text"], 
+        input[type="datetime-local"], 
+        select.form-control {
+            width: 100%;
+            height: 100%;
+            padding: 8px;
+            border: none;
+            box-sizing: border-box;
+            background: transparent;
+            font-family: inherit;
+            font-size: 13px;
+        }
+        
+        select.form-control {
+            appearance: none; 
+            background-color: transparent;
+            cursor: pointer;
+        }
+
+        .btn-add-row {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-add-row:hover {
+            background-color: #45a049;
+        }
+        
+        td:nth-child(6), 
+        td:nth-child(7) { 
+            background-color: #f0f0f0;
+            text-align: center;
+        }
+
+        /* Estilo para mostrar os dados do militar na Tela 2 */
+        .registro-info {
+            background-color: #e6eefd;
+            border: 1px solid #c1d9f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 0 auto 25px auto;
+            max-width: 95%;
+        }
+
+        .registro-info p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #1e3c72;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="primeira-tela">
+        <div class="container">
+            <div class="header">
+                <h1>🛡️ Sistema de Registro</h1>
+                <p>Preencha os dados para iniciar o registro</p>
+            </div>
+
+            <form id="registroForm">
+                <div class="form-group">
+                    <label for="nome">Nome Completo *</label>
+                    <input type="text" id="nome" name="nome" placeholder="Digite seu nome completo" required>
+                    <span class="error-message" id="nomeError">Por favor, insira seu nome</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="dataHora">Data e Hora do Início do Serviço *</label>
+                    <input type="datetime-local" id="dataHora" name="dataHora" required>
+                    <span class="error-message" id="dataHoraError">Por favor, selecione data e hora</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Unidade(s) de Trabalho * (Selecione no mínimo 2)</label>
+                    <div class="unidades-list" id="unidadesList">
+                        
+                        <div class="unidades-group">
+                            <h4>CPA NORTE</h4>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CPA_NORTE" name="unidade" value="CPA NORTE">
+                                <label for="unidade-CPA_NORTE">CPA NORTE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-6_CICOM" name="unidade" value="6 CICOM">
+                                <label for="unidade-6_CICOM">6 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-13_CICOM" name="unidade" value="13 CICOM">
+                                <label for="unidade-13_CICOM">13 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-15_CICOM" name="unidade" value="15 CICOM">
+                                <label for="unidade-15_CICOM">15 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-18_CICOM" name="unidade" value="18 CICOM">
+                                <label for="unidade-18_CICOM">18 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-26_CICOM" name="unidade" value="26 CICOM">
+                                <label for="unidade-26_CICOM">26 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-27_CICOM" name="unidade" value="27 CICOM">
+                                <label for="unidade-27_CICOM">27 CICOM</label>
+                            </div>
+                        </div>
+                        
+                        <div class="unidades-group">
+                            <h4>CPA SUL</h4>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CPA_SUL" name="unidade" value="CPA SUL">
+                                <label for="unidade-CPA_SUL">CPA SUL</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-1_CICOM" name="unidade" value="1 CICOM">
+                                <label for="unidade-1_CICOM">1 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-2_CICOM" name="unidade" value="2 CICOM">
+                                <label for="unidade-2_CICOM">2 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-3_CICOM" name="unidade" value="3 CICOM">
+                                <label for="unidade-3_CICOM">3 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-7_CICOM" name="unidade" value="7 CICOM">
+                                <label for="unidade-7_CICOM">7 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-24_CICOM" name="unidade" value="24 CICOM">
+                                <label for="unidade-24_CICOM">24 CICOM</label>
+                            </div>
+                        </div>
+                        
+                        <div class="unidades-group">
+                            <h4>CPA LESTE</h4>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CPA_LESTE" name="unidade" value="CPA LESTE">
+                                <label for="unidade-CPA_LESTE">CPA LESTE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-4_CICOM" name="unidade" value="4 CICOM">
+                                <label for="unidade-4_CICOM">4 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-9_CICOM" name="unidade" value="9 CICOM">
+                                <label for="unidade-9_CICOM">9 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-11_CICOM" name="unidade" value="11 CICOM">
+                                <label for="unidade-11_CICOM">11 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-14_CICOM" name="unidade" value="14 CICOM">
+                                <label for="unidade-14_CICOM">14 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-25_CICOM" name="unidade" value="25 CICOM">
+                                <label for="unidade-25_CICOM">25 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-28_CICOM" name="unidade" value="28 CICOM">
+                                <label for="unidade-28_CICOM">28 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-29_CICOM" name="unidade" value="29 CICOM">
+                                <label for="unidade-29_CICOM">29 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-30_CICOM" name="unidade" value="30 CICOM">
+                                <label for="unidade-30_CICOM">30 CICOM</label>
+                            </div>
+                        </div>
+                        
+                        <div class="unidades-group">
+                            <h4>CPA OESTE</h4>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CPA_OESTE" name="unidade" value="CPA OESTE">
+                                <label for="unidade-CPA_OESTE">CPA OESTE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-5_CICOM" name="unidade" value="5 CICOM">
+                                <label for="unidade-5_CICOM">5 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-8_CICOM" name="unidade" value="8 CICOM">
+                                <label for="unidade-8_CICOM">8 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-19_CICOM" name="unidade" value="19 CICOM">
+                                <label for="unidade-19_CICOM">19 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-20_CICOM" name="unidade" value="20 CICOM">
+                                <label for="unidade-20_CICOM">20 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-21_CICOM" name="unidade" value="21 CICOM">
+                                <label for="unidade-21_CICOM">21 CICOM</label>
+                            </div>
+                        </div>
+                        
+                        <div class="unidades-group">
+                            <h4>CPA C. SUL/C. OESTE</h4>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CPA_C._SUL/C._OESTE" name="unidade" value="CPA C. SUL/C. OESTE">
+                                <label for="unidade-CPA_C._SUL/C._OESTE">CPA C. SUL/C. OESTE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-10_CICOM" name="unidade" value="10 CICOM">
+                                <label for="unidade-10_CICOM">10 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-12_CICOM" name="unidade" value="12 CICOM">
+                                <label for="unidade-12_CICOM">12 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-16_CICOM" name="unidade" value="16 CICOM">
+                                <label for="unidade-16_CICOM">16 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-17_CICOM" name="unidade" value="17 CICOM">
+                                <label for="unidade-17_CICOM">17 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-22_CICOM" name="unidade" value="22 CICOM">
+                                <label for="unidade-22_CICOM">22 CICOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-23_CICOM" name="unidade" value="23 CICOM">
+                                <label for="unidade-23_CICOM">23 CICOM</label>
+                            </div>
+                        </div>
+                        
+                        <div class="unidades-group">
+                            <h4>Outras Unidades</h4>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-FT" name="unidade" value="FT">
+                                <label for="unidade-FT">FT</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-BPTRAN" name="unidade" value="BPTRAN">
+                                <label for="unidade-BPTRAN">BPTRAN</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CPTUR" name="unidade" value="CPTUR">
+                                <label for="unidade-CPTUR">CPTUR</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-RMP" name="unidade" value="RMP">
+                                <label for="unidade-RMP">RMP</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CICLO" name="unidade" value="CICLO">
+                                <label for="unidade-CICLO">CICLO</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-ROCAM" name="unidade" value="ROCAM">
+                                <label for="unidade-ROCAM">ROCAM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CHOQUE" name="unidade" value="CHOQUE">
+                                <label for="unidade-CHOQUE">CHOQUE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-MARTE" name="unidade" value="MARTE">
+                                <label for="unidade-MARTE">MARTE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-RPMON" name="unidade" value="RPMON">
+                                <label for="unidade-RPMON">RPMON</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CIPCÃES" name="unidade" value="CIPCÃES">
+                                <label for="unidade-CIPCÃES">CIPCÃES</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-COE" name="unidade" value="COE">
+                                <label for="unidade-COE">COE</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-BPAMB" name="unidade" value="BPAMB">
+                                <label for="unidade-BPAMB">BPAMB</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-CECOPOM" name="unidade" value="CECOPOM">
+                                <label for="unidade-CECOPOM">CECOPOM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-GRAER" name="unidade" value="GRAER">
+                                <label for="unidade-GRAER">GRAER</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-BPG" name="unidade" value="BPG">
+                                <label for="unidade-BPG">BPG</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-NPPM" name="unidade" value="NPPM">
+                                <label for="unidade-NPPM">NPPM</label>
+                            </div>
+                            <div class="unidade-item">
+                                <input type="checkbox" id="unidade-OUTRAS" name="unidade" value="OUTRAS UNIDADES">
+                                <label for="unidade-OUTRAS">OUTRAS UNIDADES</label>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    <span class="error-message" id="unidadeError">Por favor, selecione **no mínimo 2** unidades</span>
+                </div>
+
+                <button type="submit" class="btn-submit">Iniciar Registro</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="segunda-tela">
+        <div class="header-page">
+            <h1>🛡️ Registro de Empenhos Operacionais</h1>
+            <p>Preencha os dados das atividades para as unidades selecionadas.</p>
+        </div>
+        
+        <div id="registro-info" class="registro-info" style="display: none;">
+            <p>Militar: <span id="info-nome"></span></p>
+            <p>Início do Serviço: <span id="info-datahora"></span></p>
+        </div>
+
+        <div id="planilhas-container">
+            </div>
+    </div>
+
+    <script>
+        // Variável global para armazenar os dados de registro da tela 1
+        let dadosRegistro = {};
+
+        // Definições dos Empregos J
+        const empenhosJ = [
+            { value: "", text: "Selecione o Empenho J" },
+            { value: "J1", text: "J1: Atividade Fim" },
+            { value: "J2", text: "J2: Atividade administrativa" },
+            { value: "J3", text: "J3: Substituição de Guarnição PM" },
+            { value: "J4", text: "J4: Refeição" },
+            { value: "J5", text: "J5: Abastecimento" },
+            { value: "J6", text: "J6: Limpeza de viatura" },
+            { value: "J7", text: "J7: Manutenção mecânica" },
+            { value: "J8", text: "J8: Necessidades Fisiológicas" },
+            { value: "J9", text: "J9: Deslocamento para ocorrência" },
+            { value: "J10", text: "J10: Chegada no local da ocorrência" },
+            { value: "J11", text: "J11: Saída do local da ocorrência" },
+            { value: "J12", text: "J12: Guarnição na base" },
+            { value: "J15", text: "J15: Operação Policial Militar" }
+        ];
+
+        // Definições dos Tipos de Serviço
+        const tiposServico = [
+            { value: "", text: "Selecione o Tipo" },
+            { value: "ORDINARIO", text: "ORDINARIO" },
+            { value: "SEG", text: "SEG (Segurança)" },
+            { value: "REFORCO", text: "REFORÇO" },
+            { value: "POG", text: "POG (Policiamento Ostensivo Geral)" },
+            { value: "OUTROS", text: "OUTROS" }
+        ];
+
+        /* ==================================== */
+        /* FUNÇÕES GERAIS DA TELA 2 (PLANILHAS) */
+        /* ==================================== */
+
+        // Função para calcular a diferença de tempo em formato HH:MM
+        function calcularTempoDecorrido(inicioId, fimId, resultadoId) {
+            const inicioInput = document.getElementById(inicioId);
+            const fimInput = document.getElementById(fimId);
+            const resultadoCell = document.getElementById(resultadoId);
+
+            const inicioValue = inicioInput ? inicioInput.value : null;
+            const fimValue = fimInput ? fimInput.value : null;
+
+            if (inicioValue && fimValue) {
+                const dataInicio = new Date(inicioValue);
+                const dataFim = new Date(fimValue);
+                
+                if (dataFim >= dataInicio) {
+                    let diffMs = dataFim - dataInicio;
+                    
+                    const diffMins = Math.floor(diffMs / (1000 * 60));
+                    const hours = Math.floor(diffMins / 60);
+                    const minutes = diffMins % 60;
+                    
+                    const formattedTime = 
+                        String(hours).padStart(2, '0') + ':' + 
+                        String(minutes).padStart(2, '0');
+                    
+                    resultadoCell.textContent = formattedTime;
+                } else {
+                    resultadoCell.textContent = "Erro!"; // Caso o fim seja antes do início
+                }
+            } else {
+                resultadoCell.textContent = "";
+            }
+        }
+
+        // Função para criar uma nova linha na tabela
+        function criarLinhaRegistro(unidadeIndex, linhaIndex, tableBody) {
+            const row = tableBody.insertRow();
+            row.id = `row-${unidadeIndex}-${linhaIndex}`;
+            
+            const colunas = [
+                { type: 'text', name: 'vtr', placeholder: 'Ex: 9001' },
+                { type: 'select', name: 'tipoServico', options: tiposServico },
+                { type: 'select', name: 'empenhoJ', options: empenhosJ },
+                { type: 'datetime-local', name: 'inicio' },
+                { type: 'datetime-local', name: 'fim' },
+                { type: 'label', name: 'tempoDecorrido', value: '00:00', class: 'tempo-decorrido' },
+                { type: 'label', name: 'duracaoTotal', value: '00:00', class: 'duracao-total' },
+                { type: 'text', name: 'ultimoJ', placeholder: 'J...' },
+                { type: 'text', name: 'protocolo', placeholder: 'BO/TCO/etc' },
+                { type: 'text', name: 'natureza', placeholder: 'Ação/Ocorrência' }
+            ];
+
+            colunas.forEach((col) => {
+                const cell = row.insertCell();
+                const cellIdBase = `${unidadeIndex}-${linhaIndex}-${col.name}`;
+
+                if (col.type === 'text' || col.type === 'datetime-local') {
+                    cell.className = 'input-cell';
+                    const input = document.createElement('input');
+                    input.type = col.type;
+                    input.name = col.name;
+                    input.id = cellIdBase;
+                    if (col.placeholder) input.placeholder = col.placeholder;
+                    if (col.type === 'datetime-local') {
+                        input.onchange = () => {
+                            calcularTempoDecorrido(
+                                `${unidadeIndex}-${linhaIndex}-inicio`,
+                                `${unidadeIndex}-${linhaIndex}-fim`,
+                                `${unidadeIndex}-${linhaIndex}-tempoDecorrido`
+                            );
+                        };
+                    }
+                    cell.appendChild(input);
+
+                } else if (col.type === 'select') {
+                    cell.className = 'select-cell';
+                    const select = document.createElement('select');
+                    select.name = col.name;
+                    select.id = cellIdBase;
+                    select.className = 'form-control';
+                    col.options.forEach(optionData => {
+                        const option = document.createElement('option');
+                        option.value = optionData.value;
+                        option.textContent = optionData.text;
+                        select.appendChild(option);
+                    });
+                    cell.appendChild(select);
+
+                } else if (col.type === 'label') {
+                    cell.id = cellIdBase;
+                    cell.textContent = col.value;
+                    if(col.class) cell.classList.add(col.class);
+                }
+            });
+        }
+
+        // Função principal para gerar as planilhas
+        function gerarPlanilhas(unidades) {
+            const container = document.getElementById('planilhas-container');
+            container.innerHTML = ''; // Limpa o container
+
+            if (unidades.length < 2) {
+                 // Esta verificação já é feita na Tela 1, mas é um bom backup.
+                container.innerHTML = `<p style="text-align: center; color: #f44336; font-weight: bold;">
+                                        Erro: Nenhuma unidade selecionada para registro.</p>`;
+                return;
+            }
+
+            unidades.forEach((unidade, index) => {
+                const section = document.createElement('div');
+                section.className = 'spreadsheet-section';
+                section.innerHTML = `
+                    <h2>Unidade: ${unidade}</h2>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>VTR</th>
+                                    <th>Tipo de Serviço</th>
+                                    <th>Empenho J</th>
+                                    <th>Horário Início</th>
+                                    <th>Horário Fim</th>
+                                    <th>Tempo Decorrido</th>
+                                    <th>Duração Total</th>
+                                    <th>Último J</th>
+                                    <th>Protocolo</th>
+                                    <th>Natureza</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-${index}">
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="btn-add-row" data-unit-index="${index}">
+                        + Adicionar Empenho (J)
+                    </button>
+                `;
+                container.appendChild(section);
+
+                // Insere a primeira linha de registro
+                const tbody = document.getElementById(`tbody-${index}`);
+                criarLinhaRegistro(index, 0, tbody);
+            });
+
+            // Adiciona listener para os botões "Adicionar Empenho"
+            document.querySelectorAll('.btn-add-row').forEach(button => {
+                button.addEventListener('click', function() {
+                    const unitIndex = this.getAttribute('data-unit-index');
+                    const tbody = document.getElementById(`tbody-${unitIndex}`);
+                    const newRowIndex = tbody.rows.length;
+                    criarLinhaRegistro(unitIndex, newRowIndex, tbody);
+                });
+            });
+        }
+
+        /* ==================================== */
+        /* LÓGICA DE TRANSIÇÃO (TELA 1 -> TELA 2) */
+        /* ==================================== */
+
+        // Define data/hora atual ao carregar a página na Tela 1
+        document.addEventListener('DOMContentLoaded', function() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('dataHora').value = now.toISOString().slice(0, 16);
+        });
+
+        document.getElementById('registroForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Limpa erros anteriores
+            document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+            document.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
+            
+            // Validação
+            let isValid = true;
+            const nomeInput = document.getElementById('nome');
+            const dataHoraInput = document.getElementById('dataHora');
+            const unidadesList = document.getElementById('unidadesList');
+            
+            const unidadesSelecionadas = Array.from(document.querySelectorAll('input[name="unidade"]:checked'))
+                                             .map(checkbox => checkbox.value);
+            
+            if (!nomeInput.value.trim()) {
+                nomeInput.classList.add('error');
+                document.getElementById('nomeError').style.display = 'block';
+                isValid = false;
+            }
+            
+            if (!dataHoraInput.value) {
+                dataHoraInput.classList.add('error');
+                document.getElementById('dataHoraError').style.display = 'block';
+                isValid = false;
+            }
+            
+            // Validação para mínimo de 2 unidades
+            if (unidadesSelecionadas.length < 2) {
+                unidadesList.classList.add('error'); 
+                document.getElementById('unidadeError').style.display = 'block';
+                isValid = false;
+            }
+            
+            if (isValid) {
+                // 1. Armazena os dados de registro
+                dadosRegistro = {
+                    nome: nomeInput.value.trim(),
+                    dataHora: dataHoraInput.value,
+                    unidades: unidadesSelecionadas
+                };
+
+                // 2. Esconde a primeira tela e mostra a segunda
+                document.getElementById('primeira-tela').style.display = 'none';
+                document.getElementById('segunda-tela').style.display = 'block';
+                
+                // 3. Exibe os dados de identificação na Tela 2
+                document.getElementById('info-nome').textContent = dadosRegistro.nome;
+                
+                // Formata a data para melhor visualização (opcional)
+                const dataFormatada = new Date(dadosRegistro.dataHora).toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+                document.getElementById('info-datahora').textContent = dataFormatada;
+                document.getElementById('registro-info').style.display = 'block';
+
+                // 4. Gera as planilhas *apenas* para as unidades selecionadas
+                gerarPlanilhas(dadosRegistro.unidades);
+            }
+        });
+
+        // Adiciona um listener para permitir clicar em qualquer parte do item para marcar/desmarcar o checkbox
+        document.querySelectorAll('.unidade-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'INPUT') {
+                    const checkbox = this.querySelector('input[type="checkbox"]');
+                    checkbox.checked = !checkbox.checked;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
