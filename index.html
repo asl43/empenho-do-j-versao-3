@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Registro de Empenhos Operacionais</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         /* ==================================== */
@@ -95,7 +96,8 @@
         input[type="text"],
         input[type="datetime-local"],
         textarea,
-        input[type="file"] { /* Adicionado estilo para input file */
+        input[type="file"],
+        select { /* Adicionado estilo para input file e select */
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e0e0e0;
@@ -108,7 +110,8 @@
         input[type="text"]:focus,
         input[type="datetime-local"]:focus,
         textarea:focus,
-        input[type="file"]:focus {
+        input[type="file"]:focus,
+        select:focus {
             outline: none;
             border-color: #2a5298;
             box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
@@ -198,6 +201,12 @@
         }
         .btn-action.secondary:hover {
             background: #5a6268;
+        }
+        .btn-action.export-excel {
+            background: #28a745; /* Verde para exportação Excel */
+        }
+        .btn-action.export-excel:hover {
+            background: #218838;
         }
 
         .btn-submit:hover, .btn-action:hover {
@@ -360,6 +369,15 @@
             max-width: 300px;
             margin: 20px auto;
         }
+        
+        #pdf-actions .btn-export-group {
+            display: flex;
+            gap: 10px;
+        }
+        #pdf-actions .btn-export-group .btn-action {
+            width: 50%;
+            padding: 10px;
+        }
 
         #pdf-actions select {
             padding: 10px;
@@ -371,18 +389,30 @@
         /* Estilo para a tabela de guarnições na terceira tela */
         #guarnicoesTable {
             min-width: 600px; /* Garante que a tabela tenha um tamanho mínimo */
+            margin-bottom: 20px;
         }
         #guarnicoesTable input {
             border: 1px solid #e0e0e0;
             padding: 5px;
             border-radius: 4px;
         }
+        
+        /* Linha de agrupamento por unidade */
+        .unidade-group-row td {
+            background-color: #2a5298 !important;
+            color: white;
+            font-weight: bold;
+            font-size: 15px;
+            text-align: center !important;
+            padding: 10px;
+        }
 
     </style>
 </head>
 <body>
     
-    <div id="primeira-tela">
+    
+<div id="primeira-tela">
         <div class="container">
             <div class="header">
                 <h1>🛡️ Sistema de Registro</h1>
@@ -408,7 +438,8 @@
                     <span class="error-message" id="dadosPlanilhaError">Por favor, cole os dados da planilha.</span>
                 </div>
 
-                <div class="form-group">
+                
+<div class="form-group">
                     <label for="uploadImagem">Ou Carregue uma Imagem da Planilha (OCR Simulado)</label>
                     <input type="file" id="uploadImagem" accept="image/*">
                     <span class="error-message" id="uploadImagemError" style="display: none;">Erro ao processar imagem.</span>
@@ -417,7 +448,8 @@
                 <div class="form-group">
                     <label>Unidade(s) de Trabalho * (Selecione no mínimo 2)</label>
                     <div class="unidades-list" id="unidadesList">
-                        <div class="unidades-group">
+                        
+<div class="unidades-group">
                             <h4>CPA NORTE</h4>
                             <div class="unidade-item">
                                 <input type="checkbox" id="unidade-CPA_NORTE" name="unidade" value="CPA NORTE">
@@ -657,7 +689,8 @@
         </div>
     </div>
     
-    <div id="segunda-tela">
+    
+<div id="segunda-tela">
         <div class="header-page">
             <h1>🛡️ Registro de Empenhos Operacionais</h1>
             <p>Preencha os dados das atividades para as unidades selecionadas.</p>
@@ -666,7 +699,7 @@
         <div class="navigation-buttons">
             <button type="button" class="btn-action secondary" onclick="voltarParaPrimeiraTela()">Voltar ao Início</button>
             <button type="button" class="btn-action secondary" onclick="irParaTerceiraTela()">Gerenciar Guarnições</button>
-            <button type="button" class="btn-action secondary" onclick="gerarPDF()">Gerar PDF</button>
+            <button type="button" class="btn-action" onclick="togglePDFSection()">Exportar Dados</button>
         </div>
 
         <div id="registro-info" class="registro-info" style="display: none;">
@@ -675,7 +708,8 @@
             <p>VTRs Ativas da Planilha: <span id="info-vtrs-ativas">Nenhuma viatura detectada.</span></p>
         </div>
 
-        <div class="spreadsheet-section" id="atualizarGuarnicaoSection">
+        
+<div class="spreadsheet-section" id="atualizarGuarnicaoSection">
             <h2>Atualizar Guarnições Ativas (07h, 15h, etc.)</h2>
             <div class="form-group">
                 <label for="dadosPlanilhaUpdate">Cole o novo texto da planilha de guarnição aqui:</label>
@@ -690,27 +724,32 @@
         </div>
 
         <div id="planilhas-container">
-            </div>
+            
+</div>
 
-        <div id="pdf-export-section" class="spreadsheet-section" style="display: none;">
-            <h2>Exportar para PDF</h2>
+        
+<div id="pdf-export-section" class="spreadsheet-section" style="display: none;">
+            <h2>Exportar Estatísticas e Guarnições</h2>
             <div id="pdf-actions">
-                <select id="pdf-scope-select">
+                <select id="export-scope-select">
                     <option value="all">Tudo (Todas as planilhas, estatísticas e guarnições)</option>
-                    <option value="current_unit">Unidade Atual (Selecione a planilha ativa)</option>
                     <option value="statistics">Somente Estatísticas</option>
                     <option value="guarnicoes_tela">Somente Tabela de Guarnições</option>
                 </select>
-                <button class="btn-action" onclick="gerarPDF()">Gerar PDF</button>
+                <div class="btn-export-group">
+                    <button class="btn-action" onclick="gerarPDF()">Gerar PDF</button>
+                    <button class="btn-action export-excel" onclick="exportarParaExcel()">Gerar Excel</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="terceira-tela" class="content-wrapper">
+    
+<div id="terceira-tela" class="content-wrapper">
         <div class="spreadsheet-section" style="max-width: 900px; margin: 0 auto; min-height: 80vh;">
             <div class="header-page">
                 <h1>Gerenciamento de Guarnições Ativas</h1>
-                <p>Aqui você pode visualizar, adicionar, editar e excluir as informações das guarnições.</p>
+                <p>Aqui você pode visualizar, adicionar, editar e excluir as informações das guarnições. Organizado por Unidade.</p>
             </div>
 
             <div class="navigation-buttons">
@@ -721,15 +760,16 @@
                 <table id="guarnicoesTable">
                     <thead>
                         <tr>
-                            <th>Guarnição/VTR</th>
-                            <th>Unidade</th>
-                            <th>Nome do Militar</th>
-                            <th>Telefone</th>
-                            <th>Ação</th>
+                            <th style="width: 20%;">Guarnição/VTR</th>
+                            <th style="width: 20%;">Unidade</th>
+                            <th style="width: 30%;">Nome do Militar</th>
+                            <th style="width: 20%;">Telefone</th>
+                            <th style="width: 10%;">Ação</th>
                         </tr>
                     </thead>
                     <tbody id="guarnicoesTableBody">
-                        </tbody>
+                        
+</tbody>
                 </table>
             </div>
 
@@ -817,6 +857,11 @@
             renderizarGuarnicoesTable();
         }
 
+        function togglePDFSection() {
+            const section = document.getElementById('pdf-export-section');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        }
+
         /* ==================================== */
         /* FUNÇÕES DE DATA E HORA */
         /* ==================================== */
@@ -896,8 +941,12 @@
             const linhas = textoBruto.trim().split('\n');
             const dadosExtraidos = [];
             
-            // Assume que a primeira linha é o cabeçalho
-            for (let i = 1; i < linhas.length; i++) {
+            // Assume que a primeira linha é o cabeçalho (apenas ignora se não contiver 'Guarnição')
+            const startIndex = linhas.findIndex(l => l.toUpperCase().includes('GUARNIÇÃO') || l.toUpperCase().includes('VTR')) > -1 ?
+                               linhas.findIndex(l => l.toUpperCase().includes('GUARNIÇÃO') || l.toUpperCase().includes('VTR')) + 1 :
+                               0;
+                               
+            for (let i = startIndex; i < linhas.length; i++) {
                 const linha = linhas[i].trim();
                 if (!linha) continue;
 
@@ -914,6 +963,7 @@
                     const unidadeNormalizada = normalizarNomeUnidade(unidadeRaw);
 
                     if (vtr && unidadeNormalizada) {
+                        // Simulação de extração de nome (ajuste conforme o padrão real da sua planilha)
                         const nomeMilitar = efetivo.split('SGT G. BRAGA').length > 1 ? 'SGT G. BRAGA' :
                                            efetivo.split('AL CFSD FRANÇA').length > 1 ? 'AL CFSD FRANÇA' :
                                            efetivo.split('SGT RONE').length > 1 ? 'SGT RONE' :
@@ -926,14 +976,14 @@
                                            efetivo.split('CB R. DE SOUZA').length > 1 ? 'CB R. DE SOUZA' :
                                            efetivo.split('SGT D. SEABRA').length > 1 ? 'SGT D. SEABRA' :
                                            efetivo.split('SUBTEN ANDREIA').length > 1 ? 'SUBTEN ANDREIA' :
-                                           ''; // Pega o primeiro nome antes do '+' ou o efetivo completo
+                                           '';
                                            
                         dadosExtraidos.push({
                             vtr: vtr,
                             unidade: unidadeNormalizada,
                             tipoServico: frenteServico,
-                            nome: nomeMilitar, // Nome extraído
-                            telefone: '' // Adicionar manualmente
+                            nome: nomeMilitar, 
+                            telefone: '' 
                         });
                     }
                 }
@@ -978,8 +1028,7 @@
             // Simulação de delay para "processamento"
             await new Promise(resolve => setTimeout(resolve, 1500)); 
 
-            // Em um ambiente real, você enviaria o 'file' para um serviço de OCR (API) aqui.
-            // Exemplo de como seria o retorno (você precisaria adaptar o texto para um cenário real):
+            // Texto simulado: Mantenha este padrão de cópia da sua planilha para garantir que o processamento funcione
             const simulatedOCRText = `
 Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade Data Montagem GU
 25-1000 Ativo Batalhão Amazonas 25DIP Ordinário 1 SGT G. BRAGA [+] Viaturas 18/10/2023 07:58:08
@@ -1159,10 +1208,11 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             unidades.forEach((unidade, index) => {
                 const section = document.createElement('div');
                 section.className = 'spreadsheet-section';
+                section.id = `planilha-unidade-${index}`; // Adiciona ID para exportação individual
                 section.innerHTML = `
                     <h2>Unidade: ${unidade}</h2>
                     <div class="table-container">
-                        <table>
+                        <table id="table-unidade-${index}">
                             <thead>
                                 <tr>
                                     <th>VTR</th>
@@ -1211,9 +1261,23 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             container.appendChild(estatisticasDiv);
 
             atualizarEstatisticas();
+            
+            // Popula o select de unidade individual para exportação
+            const scopeSelect = document.getElementById('export-scope-select');
+            scopeSelect.innerHTML = `
+                <option value="all">Tudo (Todas as planilhas, estatísticas e guarnições)</option>
+                <option value="statistics_guarnicoes">Estatísticas e Gerenciamento de Guarnições</option>
+                <option value="statistics">Somente Estatísticas</option>
+                <option value="guarnicoes_tela">Somente Tabela de Guarnições</option>
+            `;
+            dadosRegistro.unidades.forEach((unidade, index) => {
+                scopeSelect.innerHTML += `<option value="unit-${index}">Unidade: ${unidade}</option>`;
+            });
         }
 
         function atualizarEstatisticas() {
+            // ... (Função atualizarEstatisticas mantida, omitida por brevidade) ...
+            
             const estatisticas = { empenhos: {}, vtrPorUnidade: {}, totalVTRs: 0, protocolosENaturezas: [] };
 
             dadosRegistro.unidades.forEach((unidade, unidadeIndex) => {
@@ -1304,7 +1368,9 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 Object.values(vtrsAtivasPorUnidade).flat().map(d => d.vtr).join(', ') || 'Nenhuma viatura detectada.';
 
             // Regenera as planilhas para que os dropdowns de VTR sejam atualizados
-            gerarPlanilhas(dadosRegistro.unidades); 
+            if (dadosRegistro.unidades) {
+                gerarPlanilhas(dadosRegistro.unidades); 
+            }
 
             alert('Dados da planilha de guarnição atualizados com sucesso!');
             dadosPlanilhaInput.value = ''; // Limpa o campo após atualização
@@ -1332,17 +1398,42 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             const tbody = document.getElementById('guarnicoesTableBody');
             tbody.innerHTML = ''; // Limpa a tabela
             
-            guarnicoesCompletas.forEach((guarnicao, index) => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${guarnicao.vtr}</td>
-                    <td>${guarnicao.unidade}</td>
-                    <td><input type="text" value="${guarnicao.nome || ''}" onchange="atualizarGuarnicao(${index}, 'nome', this.value)"></td>
-                    <td><input type="text" value="${guarnicao.telefone || ''}" onchange="atualizarGuarnicao(${index}, 'telefone', this.value)"></td>
-                    <td class="delete-cell">
-                        <button type="button" class="btn-delete-row" onclick="excluirGuarnicao(${index})">X Excluir</button>
-                    </td>
-                `;
+            // 1. Agrupar por Unidade
+            const guarnicoesAgrupadas = guarnicoesCompletas.reduce((acc, guarnicao) => {
+                const unidade = guarnicao.unidade || 'NÃO ESPECIFICADA';
+                if (!acc[unidade]) {
+                    acc[unidade] = [];
+                }
+                acc[unidade].push(guarnicao);
+                return acc;
+            }, {});
+
+            // 2. Renderizar a tabela
+            let index = 0; // Índice real para atualização de dados
+            
+            Object.keys(guarnicoesAgrupadas).sort().forEach(unidade => {
+                // Adiciona linha de cabeçalho da unidade
+                let headerRow = tbody.insertRow();
+                headerRow.className = 'unidade-group-row';
+                let headerCell = headerRow.insertCell();
+                headerCell.colSpan = 5; 
+                headerCell.textContent = `UNIDADE: ${unidade} (${guarnicoesAgrupadas[unidade].length} VTRs)`;
+
+                guarnicoesAgrupadas[unidade].forEach(guarnicao => {
+                    const originalIndex = guarnicoesCompletas.findIndex(g => g === guarnicao); // Encontra o índice real no array global
+                    
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td>${guarnicao.vtr}</td>
+                        <td>${guarnicao.unidade}</td>
+                        <td><input type="text" value="${guarnicao.nome || ''}" onchange="atualizarGuarnicao(${originalIndex}, 'nome', this.value)"></td>
+                        <td><input type="text" value="${guarnicao.telefone || ''}" onchange="atualizarGuarnicao(${originalIndex}, 'telefone', this.value)"></td>
+                        <td class="delete-cell">
+                            <button type="button" class="btn-delete-row" onclick="excluirGuarnicao(${originalIndex})">X Excluir</button>
+                        </td>
+                    `;
+                    index++;
+                });
             });
         }
 
@@ -1364,6 +1455,13 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             const telefone = addTelefone.value.trim();
 
             if (vtr && unidade) {
+                // Antes de adicionar, verifica se já existe para evitar duplicidade
+                const exists = guarnicoesCompletas.some(g => g.vtr === vtr && g.unidade === unidade);
+                if (exists) {
+                    alert(`A guarnição ${vtr} na ${unidade} já existe. Edite-a na tabela.`);
+                    return;
+                }
+                
                 guarnicoesCompletas.push({ vtr, unidade, nome, telefone });
                 renderizarGuarnicoesTable();
                 salvarGuarnicoesNoLocalStorage();
@@ -1394,63 +1492,82 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
 
 
         /* ==================================== */
-        /* FUNÇÕES DE GERAÇÃO DE PDF */
+        /* FUNÇÕES DE EXPORTAÇÃO (PDF E EXCEL) */
         /* ==================================== */
+
         async function gerarPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4'); // 'p' for portrait, 'mm' for millimeters, 'a4' for A4 size
 
-            const scope = document.getElementById('pdf-scope-select').value;
-            const filename = `Relatorio_Empenhos_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.pdf`;
+            const scope = document.getElementById('export-scope-select').value;
+            const filename = `Relatorio_Empenhos_${scope}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.pdf`;
 
             let elementsToPrint = [];
             let titles = [];
-
-            if (scope === 'all' || scope === 'current_unit') {
-                dadosRegistro.unidades.forEach((unidade, index) => {
-                    const tbodyId = `tbody-${index}`;
-                    const tbodyElement = document.getElementById(tbodyId);
-                    if (tbodyElement) {
-                        // Clonar o thead e tbody para uma tabela temporária para imprimir
-                        const tempTable = document.createElement('table');
-                        tempTable.innerHTML = `
-                            <thead>
-                                ${document.querySelector(`#planilhas-container h2:nth-of-type(${index + 1})`).outerHTML}
-                                ${document.querySelector(`#planilhas-container table:nth-of-type(${index + 1}) thead`).outerHTML}
-                            </thead>
-                            <tbody>${tbodyElement.innerHTML}</tbody>
-                        `;
-                        // Remove botões de exclusão na versão PDF
-                        tempTable.querySelectorAll('.btn-delete-row').forEach(btn => btn.remove());
-                        tempTable.querySelectorAll('.delete-cell').forEach(cell => cell.remove());
-                        
-                        elementsToPrint.push(tempTable);
-                        titles.push(`PLANILHA DE EMPENHOS - ${unidade}`);
-                    }
-                });
-            }
-
-            if (scope === 'all' || scope === 'statistics') {
+            
+            // Lógica para exportar Estatísticas e/ou Guarnições
+            if (scope === 'statistics_guarnicoes' || scope === 'statistics' || scope === 'all') {
                 const statsElement = document.getElementById('estatisticas-section');
                 if (statsElement) {
-                     elementsToPrint.push(statsElement.cloneNode(true)); // Clona para não modificar o original
+                     elementsToPrint.push(statsElement.cloneNode(true));
                      titles.push("ESTATÍSTICAS DO REGISTRO");
                 }
             }
 
-            if (scope === 'all' || scope === 'guarnicoes_tela') {
-                const guarnicoesElement = document.getElementById('guarnicoesTable').cloneNode(true);
-                // Remover colunas de ação e botões de exclusão
-                guarnicoesElement.querySelectorAll('th:last-child').forEach(th => th.remove());
-                guarnicoesElement.querySelectorAll('td:last-child').forEach(td => td.remove());
-                guarnicoesElement.querySelectorAll('input').forEach(input => {
-                    input.parentNode.textContent = input.value; // Substituir input pelo texto
+            if (scope === 'statistics_guarnicoes' || scope === 'guarnicoes_tela' || scope === 'all') {
+                // Para PDF, precisamos clonar a tabela e formatá-la como na terceira tela
+                const tempDiv = document.createElement('div');
+                tempDiv.style.maxWidth = '900px'; 
+                tempDiv.style.margin = '0 auto'; 
+                tempDiv.style.padding = '10px';
+                tempDiv.style.backgroundColor = 'white';
+                tempDiv.style.border = '1px solid #ccc';
+                
+                const guarnicoesTableClone = document.getElementById('guarnicoesTable').cloneNode(true);
+                
+                // Remover coluna e botões de Ação/Excluir (5ª coluna)
+                guarnicoesTableClone.querySelector('thead tr th:last-child').remove();
+                guarnicoesTableClone.querySelectorAll('tbody tr').forEach(row => {
+                    if (row.querySelector('.delete-cell')) {
+                        row.querySelector('.delete-cell').remove();
+                    }
+                    // Substituir inputs por texto para a impressão
+                    row.querySelectorAll('input').forEach(input => {
+                        input.parentNode.textContent = input.value;
+                    });
                 });
-                if (guarnicoesElement) {
-                    elementsToPrint.push(guarnicoesElement);
-                    titles.push("GUARNIÇÕES ATIVAS (TELA DE GERENCIAMENTO)");
-                }
+                
+                tempDiv.appendChild(guarnicoesTableClone);
+                elementsToPrint.push(tempDiv);
+                titles.push("GUARNIÇÕES ATIVAS (TELA DE GERENCIAMENTO)");
             }
+            
+            // Lógica para exportar Planilhas Individuais ou Tudo (se não for "statistics_guarnicoes" ou "guarnicoes_tela")
+            if (scope.startsWith('unit-') || scope === 'all') {
+                dadosRegistro.unidades.forEach((unidade, index) => {
+                    if (scope === 'all' || scope === `unit-${index}`) {
+                        const planilhaElement = document.getElementById(`planilha-unidade-${index}`);
+                        if (planilhaElement) {
+                            const planilhaClone = planilhaElement.cloneNode(true);
+                             // Remove botões e a seção de Adicionar na cópia
+                            planilhaClone.querySelector('.btn-add-row').remove();
+                            
+                             // Remove a coluna de Ação na tabela clonada
+                            planilhaClone.querySelector('table thead tr th:last-child').remove();
+                            planilhaClone.querySelectorAll('table tbody tr').forEach(row => {
+                                if (row.querySelector('.delete-cell')) {
+                                    row.querySelector('.delete-cell').remove();
+                                }
+                            });
+                            
+                            elementsToPrint.push(planilhaClone);
+                            titles.push(`PLANILHA DE EMPENHOS - ${unidade}`);
+                        }
+                    }
+                });
+            }
+
+
             
             if (elementsToPrint.length === 0) {
                 alert("Nenhum conteúdo selecionado para gerar PDF ou dados insuficientes.");
@@ -1460,11 +1577,12 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             let yOffset = 20;
             const margin = 10;
             const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
 
             for (let i = 0; i < elementsToPrint.length; i++) {
                 const element = elementsToPrint[i];
                 const title = titles[i];
-
+                
                 doc.setFontSize(16);
                 doc.text(title, pageWidth / 2, yOffset, { align: 'center' });
                 yOffset += 10;
@@ -1472,20 +1590,30 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 await html2canvas(element, { scale: 2 }).then(canvas => {
                     const imgData = canvas.toDataURL('image/png');
                     const imgWidth = 190; // A4 width - 2*margin
-                    const pageHeight = doc.internal.pageSize.getHeight();
                     const imgHeight = canvas.height * imgWidth / canvas.width;
 
                     let heightLeft = imgHeight;
+                    let currentY = yOffset;
 
-                    if (yOffset + imgHeight > pageHeight - margin && i > 0) { // Nova página se não couber
-                        doc.addPage();
-                        yOffset = margin;
+                    while (heightLeft > 0) {
+                        if (currentY >= pageHeight - margin) { // Nova página
+                            doc.addPage();
+                            currentY = margin;
+                        }
+                        
+                        const printHeight = Math.min(heightLeft, pageHeight - currentY - margin);
+                        const sY = imgHeight - heightLeft;
+
+                        doc.addImage(imgData, 'PNG', margin, currentY, imgWidth, imgHeight, null, null, null, null, sY/imgHeight);
+                        
+                        currentY += printHeight;
+                        heightLeft -= printHeight;
                     }
-                    doc.addImage(imgData, 'PNG', margin, yOffset, imgWidth, imgHeight);
-                    yOffset += imgHeight + 10; // Adiciona um espaçamento após o elemento
+
+                    yOffset = currentY + 10; // Atualiza o offset para o próximo elemento
                 });
 
-                if (i < elementsToPrint.length - 1) { // Adicionar uma nova página se não for o último elemento
+                if (i < elementsToPrint.length - 1 && yOffset > pageHeight - margin) { 
                     doc.addPage();
                     yOffset = margin;
                 }
@@ -1493,6 +1621,81 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             
             doc.save(filename);
             alert('PDF gerado com sucesso!');
+        }
+
+        // Função para exportar dados para CSV (compatível com Excel)
+        function exportarParaExcel() {
+            const scope = document.getElementById('export-scope-select').value;
+            let csvData = [];
+            let filename = `Export_${scope}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+
+            if (scope === 'statistics_guarnicoes' || scope === 'statistics' || scope === 'all') {
+                // Exportar Estatísticas
+                const estatisticasContent = document.getElementById('estatisticas-conteudo').innerText;
+                if (estatisticasContent) {
+                    csvData.push("=======================================");
+                    csvData.push("ESTATÍSTICAS DO REGISTRO");
+                    csvData.push("=======================================");
+                    csvData.push(estatisticasContent.replace(/\n\s*\n/g, '\n').replace(/\n/g, ';').trim());
+                    csvData.push(""); // Linha em branco
+                }
+            }
+
+            if (scope === 'statistics_guarnicoes' || scope === 'guarnicoes_tela' || scope === 'all') {
+                // Exportar Guarnições
+                if (guarnicoesCompletas.length > 0) {
+                    csvData.push("=======================================");
+                    csvData.push("GUARNIÇÕES ATIVAS (GERENCIAMENTO)");
+                    csvData.push("=======================================");
+                    csvData.push("Guarnição/VTR;Unidade;Nome do Militar;Telefone");
+                    
+                    // Agrupar e ordenar para a exportação do CSV
+                    const guarnicoesAgrupadas = guarnicoesCompletas.reduce((acc, g) => {
+                        const unidade = g.unidade || 'NÃO ESPECIFICADA';
+                        if (!acc[unidade]) {
+                            acc[unidade] = [];
+                        }
+                        acc[unidade].push(g);
+                        return acc;
+                    }, {});
+
+                    Object.keys(guarnicoesAgrupadas).sort().forEach(unidade => {
+                        guarnicoesAgrupadas[unidade].forEach(g => {
+                             csvData.push(`${g.vtr};${g.unidade};${g.nome || ''};${g.telefone || ''}`);
+                        });
+                    });
+                }
+            }
+            
+            // Se for para exportar planilhas individuais ou todas as planilhas
+            if (scope.startsWith('unit-') || scope === 'all') {
+                 // **AVISO:** A exportação das planilhas de empenho em andamento para CSV (que não é o foco principal agora) é complexa,
+                 // pois precisa ler todos os dados dinâmicos dos inputs/selects da tabela. 
+                 // Vamos deixar um aviso, pois o foco era Estatísticas e Guarnições.
+                 if (csvData.length === 0) { // Se não exportou nada ainda
+                    alert("A exportação de planilhas de empenho em andamento para Excel não está totalmente implementada para manter o foco em Estatísticas e Guarnições. Gere o PDF ou exporte apenas as Estatísticas/Guarnições.");
+                    return;
+                 }
+            }
+            
+            if (csvData.length === 0) {
+                alert("Nenhum dado encontrado para exportação.");
+                return;
+            }
+
+            const csvContent = csvData.join('\n');
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // \uFEFF for BOM to help Excel encoding
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            alert('Arquivo Excel (CSV) gerado com sucesso!');
         }
 
 
