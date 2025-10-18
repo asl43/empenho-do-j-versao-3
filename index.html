@@ -27,12 +27,13 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            padding: 20px;
         }
         /* Estilo do fundo principal da tela 2 */
         #segunda-tela {
             background: #f4f7f6;
             display: none; /* Inicia escondida */
-            padding: 30px 0;
+            padding: 30px 10px; 
         }
 
         /* ==================================== */
@@ -45,6 +46,12 @@
             padding: 40px;
             max-width: 500px;
             width: 100%;
+        }
+        
+        @media (max-width: 600px) {
+             .container {
+                padding: 20px;
+            }
         }
 
         .header {
@@ -76,7 +83,8 @@
         }
 
         input[type="text"],
-        input[type="datetime-local"] {
+        input[type="datetime-local"],
+        textarea { /* Adicionado estilo para textarea */
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e0e0e0;
@@ -87,10 +95,16 @@
         }
 
         input[type="text"]:focus,
-        input[type="datetime-local"]:focus {
+        input[type="datetime-local"]:focus,
+        textarea:focus {
             outline: none;
             border-color: #2a5298;
             box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
         }
 
         .unidades-list {
@@ -102,10 +116,19 @@
             background-color: #f9f9f9;
         }
 
+        .unidades-group {
+            margin-bottom: 10px; 
+            padding-bottom: 5px;
+            border-bottom: 1px dashed #c1d9f0;
+        }
+        .unidades-group:last-child {
+            border-bottom: none;
+        }
+        
         .unidades-group h4 {
             color: #1e3c72;
             font-size: 14px;
-            margin-top: 10px;
+            margin-top: 5px;
             margin-bottom: 5px;
             padding-left: 5px;
             border-bottom: 1px solid #e0e0e0;
@@ -188,7 +211,6 @@
             margin: 0 auto 30px auto;
             max-width: 95%;
             width: 100%;
-            overflow-x: auto; 
         }
 
         .spreadsheet-section h2 {
@@ -201,7 +223,7 @@
 
         .table-container {
             width: 100%;
-            overflow-x: auto;
+            overflow-x: auto; 
         }
 
         table {
@@ -278,6 +300,7 @@
             border-radius: 8px;
             margin: 0 auto 25px auto;
             max-width: 95%;
+            font-size: 14px; 
         }
 
         .registro-info p {
@@ -285,6 +308,7 @@
             font-size: 14px;
             color: #1e3c72;
             font-weight: 500;
+            word-wrap: break-word; 
         }
 
         /* Estilos para a seção de estatísticas */
@@ -297,6 +321,26 @@
             margin-top: 20px;
             color: #2a5298;
             font-size: 16px;
+        }
+        
+        /* Estilo para o botão de Excluir */
+        .btn-delete-row {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 12px;
+            line-height: 1;
+        }
+        .btn-delete-row:hover {
+            background-color: #d32f2f;
+        }
+        .delete-cell {
+            text-align: center;
+            width: 1%;
         }
     </style>
 </head>
@@ -322,6 +366,12 @@
                     <span class="error-message" id="dataHoraError">Por favor, selecione data e hora</span>
                 </div>
 
+                <div class="form-group">
+                    <label for="dadosPlanilha">Dados da Planilha de Guarnição (Copie/Cole o texto) *</label>
+                    <textarea id="dadosPlanilha" name="dadosPlanilha" placeholder="Cole aqui o texto da planilha (Guarnição, Unidade, Frente de Serviço, etc.)"></textarea>
+                    <span class="error-message" id="dadosPlanilhaError">Por favor, cole os dados da planilha.</span>
+                </div>
+                
                 <div class="form-group">
                     <label>Unidade(s) de Trabalho * (Selecione no mínimo 2)</label>
                     <div class="unidades-list" id="unidadesList">
@@ -576,16 +626,18 @@
         <div id="registro-info" class="registro-info" style="display: none;">
             <p>Militar: <span id="info-nome"></span></p>
             <p>Início do Serviço: <span id="info-datahora"></span></p>
+            <p>VTRs Ativas da Planilha: <span id="info-vtrs-ativas">Nenhuma viatura detectada.</span></p>
         </div>
 
         <div id="planilhas-container">
-            <!-- As planilhas e estatísticas serão geradas aqui -->
-        </div>
+            </div>
     </div>
 
     <script>
         // Variável global para armazenar os dados de registro da tela 1
         let dadosRegistro = {};
+        // Nova variável global para armazenar as VTRs ativas extraídas da planilha
+        let vtrsAtivasPorUnidade = {}; 
 
         // Definições dos Empregos J
         const empenhosJ = [
@@ -616,8 +668,15 @@
         ];
 
         /* ==================================== */
-        /* FUNÇÕES GERAIS DA TELA 2 (PLANILHAS) */
+        /* FUNÇÕES DE DATA E HORA */
         /* ==================================== */
+
+        // Função auxiliar para obter a hora atual formatada para input[type="datetime-local"]
+        function getNowFormatted() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            return now.toISOString().slice(0, 16);
+        }
 
         // Função para calcular a diferença de tempo em formato HH:MM
         function calcularTempoDecorrido(inicioId, fimId, resultadoId) {
@@ -653,22 +712,113 @@
             atualizarEstatisticas();
         }
 
+        /* ==================================== */
+        /* FUNÇÕES DE PROCESSAMENTO DE DADOS (PLANILHA) */
+        /* ==================================== */
+
+        // Mapeamento para corrigir nomes de unidade
+        const unitCorrectionMap = {
+            '25DIP': '25 CICOM', 
+            '11DIP': '11 CICOM',
+            '28DIP': '28 CICOM',
+            '29DIP': '29 CICOM',
+            // Adicione outras correções aqui, se necessário. Ex: '1DIP': '1 CICOM'
+        };
+
+        // Função para simular a extração e estruturar os dados da planilha
+        function processarDadosPlanilha(textoBruto) {
+            const linhas = textoBruto.trim().split('\n');
+            const dadosExtraidos = [];
+
+            // A primeira linha é o cabeçalho, a ignoramos
+            for (let i = 1; i < linhas.length; i++) {
+                const linha = linhas[i].trim();
+                if (!linha) continue;
+
+                // Tenta extrair colunas. A separação pode ser por múltiplos espaços ou tab.
+                // Usaremos uma regex para split, garantindo que colunas vazias não quebrem
+                const colunas = linha.split(/\s{2,}|\t/).filter(c => c.trim() !== '');
+
+                // Mapeamento das colunas (baseado na imagem, assumindo Guarnição, Situação, Batalhão, Unidade, Frente de Serviço...)
+                if (colunas.length >= 4) { 
+                    const vtr = colunas[0]?.trim() || '';
+                    const situacao = colunas[1]?.trim() || 'ATIVO'; // Se falhar na extração, assume ATIVO
+                    const unidadeRaw = colunas[3]?.trim() || '';
+
+                    // Normaliza o nome da unidade
+                    let unidade = unidadeRaw;
+                    if (unitCorrectionMap[unidadeRaw]) {
+                        unidade = unitCorrectionMap[unidadeRaw];
+                    } else if (unidadeRaw.endsWith('DIP')) {
+                        // Tenta converter XXDIP para XX CICOM (ex: 29DIP -> 29 CICOM)
+                        unidade = unidadeRaw.replace('DIP', ' CICOM');
+                    } else if (!unidadeRaw.toUpperCase().includes('CICOM') && !unidadeRaw.toUpperCase().includes('CPA')) {
+                        // Tenta adicionar 'CICOM' para unidades numéricas que não foram mapeadas
+                        const match = unidadeRaw.match(/^\d{1,2}$/);
+                        if(match) {
+                             unidade = `${match[0]} CICOM`;
+                        }
+                    }
+
+                    if (vtr && unidade) {
+                        dadosExtraidos.push({
+                            vtr: vtr,
+                            situacao: situacao, // Não é o tipo de serviço exato, mas ajuda a filtrar
+                            unidade: unidade.toUpperCase().replace(/_|\./g, ' ').trim(), // Normaliza o nome
+                            tipoServico: colunas[4]?.trim() || 'ORDINARIO' // Usando Frente de Serviço como Tipo
+                        });
+                    }
+                }
+            }
+            
+            // Popula a variável global
+            vtrsAtivasPorUnidade = dadosExtraidos.reduce((acc, curr) => {
+                // Remove espaços do VTR para padronizar (Ex: 25-1000 -> 25-1000)
+                const vtrKey = curr.vtr.replace(/ /g, '-').toUpperCase(); 
+
+                if (!acc[curr.unidade]) {
+                    acc[curr.unidade] = [];
+                }
+                // Armazena VTR e Tipo de Serviço para uso na primeira linha
+                acc[curr.unidade].push({ vtr: vtrKey, tipoServico: curr.tipoServico }); 
+                return acc;
+            }, {});
+
+            console.log("VTRs Ativas por Unidade:", vtrsAtivasPorUnidade);
+            return dadosExtraidos.map(d => d.vtr); // Retorna apenas a lista de VTRs
+        }
+
+
+        /* ==================================== */
+        /* FUNÇÕES DA TABELA (TELA 2) */
+        /* ==================================== */
+        
+        // Função para remover uma linha
+        function removerLinhaRegistro(unidadeIndex, linhaIndex) {
+            const row = document.getElementById(`row-${unidadeIndex}-${linhaIndex}`);
+            if (row) {
+                row.remove();
+            }
+            atualizarEstatisticas();
+        }
+
         // Função para criar uma nova linha na tabela
-        function criarLinhaRegistro(unidadeIndex, linhaIndex, tableBody) {
+        function criarLinhaRegistro(unidadeIndex, linhaIndex, tableBody, unidadeNome, isFirstRow = false) {
             const row = tableBody.insertRow();
             row.id = `row-${unidadeIndex}-${linhaIndex}`;
             
             const colunas = [
-                { type: 'text', name: 'vtr', placeholder: 'Ex: 9001' },
+                { type: 'select_vtr', name: 'vtr', placeholder: 'Selecione a VTR' }, // MODIFICADO PARA SELECT
                 { type: 'select', name: 'tipoServico', options: tiposServico },
                 { type: 'select', name: 'empenhoJ', options: empenhosJ },
                 { type: 'datetime-local', name: 'inicio' },
                 { type: 'datetime-local', name: 'fim' },
                 { type: 'label', name: 'tempoDecorrido', value: '00:00', class: 'tempo-decorrido' },
                 { type: 'label', name: 'duracaoTotal', value: '00:00', class: 'duracao-total' },
-                { type: 'text', name: 'ultimoJ', placeholder: 'J...' },
+                { type: 'select', name: 'ultimoJ', options: empenhosJ.filter(e => e.value !== ""), customLabel: "Último J" }, 
                 { type: 'text', name: 'protocolo', placeholder: 'BO/TCO/etc' },
-                { type: 'text', name: 'natureza', placeholder: 'Ação/Ocorrência' }
+                { type: 'text', name: 'natureza', placeholder: 'Ação/Ocorrência' },
+                { type: 'button', name: 'excluir' }
             ];
 
             colunas.forEach((col) => {
@@ -682,6 +832,7 @@
                     input.name = col.name;
                     input.id = cellIdBase;
                     if (col.placeholder) input.placeholder = col.placeholder;
+                    
                     if (col.type === 'datetime-local') {
                         input.onchange = () => {
                             calcularTempoDecorrido(
@@ -694,6 +845,53 @@
                         input.oninput = atualizarEstatisticas;
                     }
                     cell.appendChild(input);
+                
+                // NOVO: Select para VTR
+                } else if (col.type === 'select_vtr') {
+                    cell.className = 'select-cell';
+                    const select = document.createElement('select');
+                    select.name = col.name;
+                    select.id = cellIdBase;
+                    select.className = 'form-control';
+                    select.onchange = atualizarEstatisticas;
+
+                    const vtrsDisponiveis = vtrsAtivasPorUnidade[unidadeNome] || [];
+
+                    // Adiciona a opção padrão (vazia)
+                    let option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = col.placeholder;
+                    select.appendChild(option);
+                    
+                    // Adiciona as VTRs ativas da unidade
+                    vtrsDisponiveis.forEach(vtrData => {
+                        option = document.createElement('option');
+                        option.value = vtrData.vtr;
+                        option.textContent = vtrData.vtr;
+                        select.appendChild(option);
+                    });
+                    
+                    // Lógica para pré-popular a primeira linha com o primeiro VTR ATIVO
+                    if (isFirstRow && vtrsDisponiveis.length > 0) {
+                        select.value = vtrsDisponiveis[0].vtr;
+                        // Pré-seleciona o tipo de serviço (se houver mapeamento)
+                        const tipoSelect = row.querySelector(`select[name="tipoServico"]`);
+                        if(tipoSelect) {
+                            // Tenta encontrar a opção correspondente ao tipo de serviço extraído
+                            const serviceType = vtrsDisponiveis[0].tipoServico.toUpperCase().replace(/\s/g, ''); 
+                            const matchingOption = Array.from(tipoSelect.options).find(opt => opt.value.includes(serviceType) || serviceType.includes(opt.value));
+                            if (matchingOption) {
+                                tipoSelect.value = matchingOption.value;
+                            } else {
+                                // Se não encontrar, tenta selecionar ORDINARIO se for o caso
+                                if(vtrsDisponiveis[0].tipoServico.toUpperCase().includes('ORDINÁRIO')) {
+                                    tipoSelect.value = 'ORDINARIO';
+                                }
+                            }
+                        }
+                    }
+
+                    cell.appendChild(select);
 
                 } else if (col.type === 'select') {
                     cell.className = 'select-cell';
@@ -701,19 +899,49 @@
                     select.name = col.name;
                     select.id = cellIdBase;
                     select.className = 'form-control';
+                    
                     col.options.forEach(optionData => {
                         const option = document.createElement('option');
                         option.value = optionData.value;
                         option.textContent = optionData.text;
                         select.appendChild(option);
                     });
-                    select.onchange = atualizarEstatisticas;
+                    
+                    // Lógica para preenchimento automático de data/hora
+                    select.onchange = function() {
+                        atualizarEstatisticas(); 
+                        
+                        if (col.name === 'empenhoJ' && this.value !== "") {
+                            // Preenche o Horário Início
+                            const inicioInput = document.getElementById(`${unidadeIndex}-${linhaIndex}-inicio`);
+                            if (inicioInput) {
+                                inicioInput.value = getNowFormatted();
+                                inicioInput.dispatchEvent(new Event('change')); 
+                            }
+                        } else if (col.name === 'ultimoJ' && this.value !== "") {
+                            // Preenche o Horário Fim
+                            const fimInput = document.getElementById(`${unidadeIndex}-${linhaIndex}-fim`);
+                            if (fimInput) {
+                                fimInput.value = getNowFormatted();
+                                fimInput.dispatchEvent(new Event('change'));
+                            }
+                        }
+                    };
                     cell.appendChild(select);
 
                 } else if (col.type === 'label') {
                     cell.id = cellIdBase;
                     cell.textContent = col.value;
                     if(col.class) cell.classList.add(col.class);
+                
+                } else if (col.type === 'button' && col.name === 'excluir') {
+                    cell.className = 'delete-cell';
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'btn-delete-row';
+                    button.textContent = 'X Excluir';
+                    button.onclick = () => removerLinhaRegistro(unidadeIndex, linhaIndex);
+                    cell.appendChild(button);
                 }
             });
         }
@@ -748,28 +976,32 @@
                                     <th>Último J</th>
                                     <th>Protocolo</th>
                                     <th>Natureza</th>
+                                    <th>Ação</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-${index}">
                             </tbody>
                         </table>
                     </div>
-                    <button type="button" class="btn-add-row" data-unit-index="${index}">
+                    <button type="button" class="btn-add-row" data-unit-index="${index}" data-unit-name="${unidade}">
                         + Adicionar Empenho (J)
                     </button>
                 `;
                 container.appendChild(section);
 
                 const tbody = document.getElementById(`tbody-${index}`);
-                criarLinhaRegistro(index, 0, tbody);
+                // Cria a primeira linha, marcando-a para pré-preenchimento
+                criarLinhaRegistro(index, 0, tbody, unidade, true); 
             });
 
             document.querySelectorAll('.btn-add-row').forEach(button => {
                 button.addEventListener('click', function() {
                     const unitIndex = this.getAttribute('data-unit-index');
+                    const unidadeNome = this.getAttribute('data-unit-name');
                     const tbody = document.getElementById(`tbody-${unitIndex}`);
-                    const newRowIndex = tbody.rows.length;
-                    criarLinhaRegistro(unitIndex, newRowIndex, tbody);
+                    const newRowIndex = tbody.rows.length; 
+                    // Cria linhas subsequentes SEM pré-preenchimento
+                    criarLinhaRegistro(unitIndex, newRowIndex, tbody, unidadeNome, false); 
                     atualizarEstatisticas();
                 });
             });
@@ -786,6 +1018,9 @@
 
         // Nova função: Atualiza as estatísticas com base nos dados preenchidos
         function atualizarEstatisticas() {
+            // ... (A função atualizarEstatisticas não precisa de modificações, pois ela lê os dados
+            // da tabela e isso não muda)
+            
             const estatisticas = {
                 empenhos: {},
                 vtrPorUnidade: {},
@@ -801,7 +1036,7 @@
 
                 Array.from(tbody.rows).forEach(row => {
                     const empenhoSelect = row.querySelector(`select[name="empenhoJ"]`);
-                    const vtrInput = row.querySelector(`input[name="vtr"]`);
+                    const vtrInput = row.querySelector(`select[name="vtr"]`); // Agora é um select
                     const protocoloInput = row.querySelector(`input[name="protocolo"]`);
                     const naturezaInput = row.querySelector(`input[name="natureza"]`);
 
@@ -841,7 +1076,7 @@
             }
 
             // VTRs por unidade
-            html += '<h3>VTRs Montados</h3>';
+            html += '<h3>VTRs Registrados</h3>';
             if (estatisticas.totalVTRs === 0) {
                 html += '<p>Nenhum VTR registrado ainda.</p>';
             } else {
@@ -872,9 +1107,7 @@
         /* ==================================== */
 
         document.addEventListener('DOMContentLoaded', function() {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            document.getElementById('dataHora').value = now.toISOString().slice(0, 16);
+            document.getElementById('dataHora').value = getNowFormatted();
         });
 
         document.getElementById('registroForm').addEventListener('submit', function(e) {
@@ -887,7 +1120,8 @@
             const nomeInput = document.getElementById('nome');
             const dataHoraInput = document.getElementById('dataHora');
             const unidadesList = document.getElementById('unidadesList');
-            
+            const dadosPlanilhaInput = document.getElementById('dadosPlanilha'); // Novo
+
             const unidadesSelecionadas = Array.from(document.querySelectorAll('input[name="unidade"]:checked'))
                                              .map(checkbox => checkbox.value);
             
@@ -902,6 +1136,12 @@
                 document.getElementById('dataHoraError').style.display = 'block';
                 isValid = false;
             }
+
+            if (!dadosPlanilhaInput.value.trim()) { // Valida a planilha
+                dadosPlanilhaInput.classList.add('error');
+                document.getElementById('dadosPlanilhaError').style.display = 'block';
+                isValid = false;
+            }
             
             if (unidadesSelecionadas.length < 2) {
                 unidadesList.classList.add('error'); 
@@ -910,21 +1150,35 @@
             }
             
             if (isValid) {
+                // 1. Processa os dados da planilha antes de avançar
+                const vtrsAtivas = processarDadosPlanilha(dadosPlanilhaInput.value); 
+
+                if (Object.keys(vtrsAtivasPorUnidade).length === 0) {
+                    alert("Erro ao extrair VTRs/Unidades da planilha. Verifique o formato do texto copiado.");
+                    dadosPlanilhaInput.classList.add('error');
+                    document.getElementById('dadosPlanilhaError').style.display = 'block';
+                    isValid = false;
+                    return; 
+                }
+
                 dadosRegistro = {
                     nome: nomeInput.value.trim(),
                     dataHora: dataHoraInput.value,
-                    unidades: unidadesSelecionadas
+                    unidades: unidadesSelecionadas,
+                    vtrsAtivas: vtrsAtivas // Armazena a lista de VTRs ativas
                 };
 
                 document.getElementById('primeira-tela').style.display = 'none';
                 document.getElementById('segunda-tela').style.display = 'block';
                 
+                // Atualiza as informações de registro na Tela 2
                 document.getElementById('info-nome').textContent = dadosRegistro.nome;
                 const dataFormatada = new Date(dadosRegistro.dataHora).toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', year: 'numeric',
                     hour: '2-digit', minute: '2-digit'
                 });
                 document.getElementById('info-datahora').textContent = dataFormatada;
+                document.getElementById('info-vtrs-ativas').textContent = vtrsAtivas.join(', ') || 'Nenhuma viatura detectada.';
                 document.getElementById('registro-info').style.display = 'block';
 
                 gerarPlanilhas(dadosRegistro.unidades);
