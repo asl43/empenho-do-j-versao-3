@@ -733,6 +733,7 @@
             <div id="pdf-actions">
                 <select id="export-scope-select">
                     <option value="all">Tudo (Todas as planilhas, estatísticas e guarnições)</option>
+                    <option value="statistics_guarnicoes">Estatísticas e Gerenciamento de Guarnições</option>
                     <option value="statistics">Somente Estatísticas</option>
                     <option value="guarnicoes_tela">Somente Tabela de Guarnições</option>
                 </select>
@@ -791,6 +792,7 @@
         let dadosRegistro = {}; // Dados do formulário da primeira tela
         let vtrsAtivasPorUnidade = {}; // { 'UNIDADE': [{vtr: 'VTR1', tipoServico: 'ORDINARIO'}, ...]}
         let guarnicoesCompletas = []; // [{ vtr: '25-1000', unidade: '25 CICOM', nome: 'SGT BRAGA', telefone: '9999-9999' }]
+        let registrosEmpenhos = []; // NOVO: Armazena os dados preenchidos da Planilha de Empenhos (Tela 2)
 
         // Mapeamento para correção de nomes de unidade da planilha (ajuste fino)
         const unitCorrectionMap = {
@@ -829,6 +831,48 @@
         ];
 
         /* ==================================== */
+        /* FUNÇÕES DE PERSISTÊNCIA (LOCALSTORAGE) */
+        /* ==================================== */
+
+        function carregarDadosIniciais() {
+            const storedRegistro = localStorage.getItem('dadosRegistro');
+            if (storedRegistro) {
+                dadosRegistro = JSON.parse(storedRegistro);
+                // Preenche dados da tela 2
+                document.getElementById('info-nome').textContent = dadosRegistro.nome;
+                document.getElementById('info-datahora').textContent = new Date(dadosRegistro.dataHora).toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                document.getElementById('registro-info').style.display = 'block';
+            }
+
+            const storedVTRs = localStorage.getItem('vtrsAtivasPorUnidade');
+            if (storedVTRs) {
+                vtrsAtivasPorUnidade = JSON.parse(storedVTRs);
+                document.getElementById('info-vtrs-ativas').textContent = 
+                    Object.values(vtrsAtivasPorUnidade).flat().map(d => d.vtr).join(', ') || 'Nenhuma viatura detectada.';
+            }
+
+            const storedEmpenhos = localStorage.getItem('registrosEmpenhos');
+            if (storedEmpenhos) {
+                registrosEmpenhos = JSON.parse(storedEmpenhos);
+            }
+        }
+
+        function salvarDadosIniciais() {
+            localStorage.setItem('dadosRegistro', JSON.stringify(dadosRegistro));
+            localStorage.setItem('vtrsAtivasPorUnidade', JSON.stringify(vtrsAtivasPorUnidade));
+        }
+
+        function salvarRegistrosNoLocalStorage() {
+            localStorage.setItem('registrosEmpenhos', JSON.stringify(registrosEmpenhos));
+        }
+        
+        function salvarGuarnicoesNoLocalStorage() {
+            localStorage.setItem('guarnicoesCompletas', JSON.stringify(guarnicoesCompletas));
+        }
+
+        /* ==================================== */
         /* FUNÇÕES GERAIS DE UI E NAVEGAÇÃO */
         /* ==================================== */
 
@@ -843,18 +887,30 @@
         }
 
         function voltarParaPrimeiraTela() {
+            // Não precisa salvar, pois é o início
             mostrarTela('primeira-tela');
         }
 
-        function voltarParaSegundaTela() {
-            mostrarTela('segunda-tela');
-            // Recarrega as planilhas para garantir que os dropdowns de VTR estão atualizados
-            gerarPlanilhas(dadosRegistro.unidades); 
-        }
-
         function irParaTerceiraTela() {
+            // 1. Salvar dados da Tela 2 antes de sair
+            coletarDadosPlanilhas();
+            salvarRegistrosNoLocalStorage();
+            
+            // 2. Mudar de tela
             mostrarTela('terceira-tela');
             renderizarGuarnicoesTable();
+        }
+        
+        function voltarParaSegundaTela() {
+             // 1. Mudar de tela
+            mostrarTela('segunda-tela');
+            
+            // 2. Recarrega as planilhas do localStorage e aplica no DOM
+            gerarPlanilhas(dadosRegistro.unidades); 
+            aplicarDadosPlanilhas();
+            
+            // 3. Atualiza as estatísticas
+            atualizarEstatisticas();
         }
 
         function togglePDFSection() {
@@ -872,15 +928,8 @@
             return now.toISOString().slice(0, 16);
         }
 
-        function calcularTempoDecorrido(inicioId, fimId, resultadoId) {
-            const inicioInput = document.getElementById(inicioId);
-            const fimInput = document.getElementById(fimId);
-            const resultadoCell = document.getElementById(resultadoId);
-
-            const inicioValue = inicioInput ? inicioInput.value : null;
-            const fimValue = fimInput ? fimInput.value : null;
-
-            if (inicioValue && fimValue) {
+        function calcularTempoDecorrido(inicioValue, fimValue) {
+             if (inicioValue && fimValue) {
                 const dataInicio = new Date(inicioValue);
                 const dataFim = new Date(fimValue);
                 
@@ -890,21 +939,38 @@
                     const hours = Math.floor(diffMins / 60);
                     const minutes = diffMins % 60;
                     
-                    const formattedTime = 
-                        String(hours).padStart(2, '0') + ':' + 
-                        String(minutes).padStart(2, '0');
-                    resultadoCell.textContent = formattedTime;
+                    return String(hours).padStart(2, '0') + ':' + 
+                           String(minutes).padStart(2, '0');
                 } else {
-                    resultadoCell.textContent = "Erro!";
+                    return "Erro!";
                 }
-            } else {
-                resultadoCell.textContent = "";
             }
+            return "00:00";
+        }
+        
+        // Listener unificado que atualiza o DOM e salva os dados no array global
+        function handleInputDataChange(unidadeIndex, linhaIndex, campo, valor) {
+            // 1. Atualizar o DOM para os campos de Tempo Decorrido
+            if (campo === 'inicio' || campo === 'fim') {
+                 const inicioInput = document.getElementById(`${unidadeIndex}-${linhaIndex}-inicio`);
+                 const fimInput = document.getElementById(`${unidadeIndex}-${linhaIndex}-fim`);
+                 const resultadoCell = document.getElementById(`${unidadeIndex}-${linhaIndex}-tempoDecorrido`);
+
+                 const tempo = calcularTempoDecorrido(inicioInput.value, fimInput.value);
+                 if (resultadoCell) resultadoCell.textContent = tempo;
+            }
+            
+            // 2. Coletar e Salvar no array global (para persistência)
+            coletarDadosPlanilhas();
+            salvarRegistrosNoLocalStorage();
+
+            // 3. Atualizar Estatísticas
             atualizarEstatisticas();
         }
 
+
         /* ==================================== */
-        /* FUNÇÕES DE PROCESSAMENTO DE DADOS (PLANILHA) */
+        /* FUNÇÕES DE PROCESSAMENTO DE DADOS (PLANILHA INICIAL) */
         /* ==================================== */
 
         function normalizarNomeUnidade(unidadeRaw) {
@@ -1010,7 +1076,9 @@
                 telefone: '' 
             }));
 
-            salvarGuarnicoesNoLocalStorage(); // Salva no LocalStorage
+            salvarGuarnicoesNoLocalStorage(); 
+            salvarDadosIniciais(); // Salva as VTRs ativas
+
             return dadosExtraidos.map(d => d.vtr); // Retorna apenas a lista de VTRs para info na tela 2
         }
 
@@ -1049,6 +1117,36 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             alert('Texto simulado extraído da imagem. Por favor, revise e ajuste o texto se necessário.');
         }
 
+        // Função para atualizar os dados da planilha na segunda tela
+        function atualizarDadosPlanilha() {
+            const dadosPlanilhaInput = document.getElementById('dadosPlanilhaUpdate');
+            const errorSpan = document.getElementById('dadosPlanilhaUpdateError');
+
+            if (!dadosPlanilhaInput.value.trim()) {
+                errorSpan.style.display = 'block';
+                return;
+            }
+            errorSpan.style.display = 'none';
+
+            // Salva os dados ATUAIS da planilha antes de reprocessar as VTRs
+            coletarDadosPlanilhas(); 
+
+            processarDadosPlanilha(dadosPlanilhaInput.value); // Reprocessa e atualiza vtrsAtivasPorUnidade e guarnicoesCompletas
+            
+            // Atualiza a exibição de VTRs ativas na info-box
+            document.getElementById('info-vtrs-ativas').textContent = 
+                Object.values(vtrsAtivasPorUnidade).flat().map(d => d.vtr).join(', ') || 'Nenhuma viatura detectada.';
+
+            // Regenera as planilhas (usando os dados salvos anteriormente + novos VTRs no dropdown)
+            if (dadosRegistro.unidades) {
+                gerarPlanilhas(dadosRegistro.unidades); 
+                aplicarDadosPlanilhas();
+            }
+
+            alert('Dados da planilha de guarnição atualizados com sucesso!');
+            dadosPlanilhaInput.value = ''; // Limpa o campo após atualização
+        }
+
         /* ==================================== */
         /* FUNÇÕES DA TABELA DE EMPENHOS (TELA 2) */
         /* ==================================== */
@@ -1058,24 +1156,38 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             if (row) {
                 row.remove();
             }
+            // Coletar, Salvar e Atualizar Estatísticas
+            coletarDadosPlanilhas();
+            salvarRegistrosNoLocalStorage();
             atualizarEstatisticas();
         }
 
-        function criarLinhaRegistro(unidadeIndex, linhaIndex, tableBody, unidadeNome, isFirstRow = false) {
+        function criarLinhaRegistro(unidadeIndex, linhaIndex, tableBody, unidadeNome, data = {}, isFirstRow = false) {
             const row = tableBody.insertRow();
             row.id = `row-${unidadeIndex}-${linhaIndex}`;
             
+            // Valor padrão ou do dado carregado
+            const vtrValue = data.vtr || "";
+            const tipoServicoValue = data.tipoServico || "";
+            const empenhoJValue = data.empenhoJ || "";
+            const inicioValue = data.inicio || "";
+            const fimValue = data.fim || "";
+            const protocoloValue = data.protocolo || "";
+            const naturezaValue = data.natureza || "";
+            const ultimoJValue = data.ultimoJ || "";
+            const tempoDecorridoValue = calcularTempoDecorrido(inicioValue, fimValue);
+            
             const colunas = [
-                { type: 'select_vtr', name: 'vtr', placeholder: 'Selecione a VTR' }, 
-                { type: 'select', name: 'tipoServico', options: tiposServico },
-                { type: 'select', name: 'empenhoJ', options: empenhosJ },
-                { type: 'datetime-local', name: 'inicio' },
-                { type: 'datetime-local', name: 'fim' },
-                { type: 'label', name: 'tempoDecorrido', value: '00:00', class: 'tempo-decorrido' },
-                { type: 'label', name: 'duracaoTotal', value: '00:00', class: 'duracao-total' },
-                { type: 'select', name: 'ultimoJ', options: empenhosJ.filter(e => e.value !== ""), customLabel: "Último J" }, 
-                { type: 'text', name: 'protocolo', placeholder: 'BO/TCO/etc' },
-                { type: 'text', name: 'natureza', placeholder: 'Ação/Ocorrência' },
+                { type: 'select_vtr', name: 'vtr', placeholder: 'Selecione a VTR', value: vtrValue }, 
+                { type: 'select', name: 'tipoServico', options: tiposServico, value: tipoServicoValue },
+                { type: 'select', name: 'empenhoJ', options: empenhosJ, value: empenhoJValue },
+                { type: 'datetime-local', name: 'inicio', value: inicioValue },
+                { type: 'datetime-local', name: 'fim', value: fimValue },
+                { type: 'label', name: 'tempoDecorrido', value: tempoDecorridoValue, class: 'tempo-decorrido' },
+                { type: 'label', name: 'duracaoTotal', value: '00:00', class: 'duracao-total' }, // Mantido "00:00" como marcador, mas o valor real é o do Tempo Decorrido na prática de Empenhos
+                { type: 'select', name: 'ultimoJ', options: empenhosJ.filter(e => e.value !== ""), customLabel: "Último J", value: ultimoJValue }, 
+                { type: 'text', name: 'protocolo', placeholder: 'BO/TCO/etc', value: protocoloValue },
+                { type: 'text', name: 'natureza', placeholder: 'Ação/Ocorrência', value: naturezaValue },
                 { type: 'button', name: 'excluir' }
             ];
 
@@ -1090,18 +1202,11 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                     input.name = col.name;
                     input.id = cellIdBase;
                     if (col.placeholder) input.placeholder = col.placeholder;
+                    input.value = col.value;
                     
-                    if (col.type === 'datetime-local') {
-                        input.onchange = () => {
-                            calcularTempoDecorrido(
-                                `${unidadeIndex}-${linhaIndex}-inicio`,
-                                `${unidadeIndex}-${linhaIndex}-fim`,
-                                `${unidadeIndex}-${linhaIndex}-tempoDecorrido`
-                            );
-                        };
-                    } else {
-                        input.oninput = atualizarEstatisticas;
-                    }
+                    input.onchange = input.oninput = function() {
+                        handleInputDataChange(unidadeIndex, linhaIndex, col.name, this.value);
+                    };
                     cell.appendChild(input);
 
                 } else if (col.type === 'select_vtr') {
@@ -1110,7 +1215,9 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                     select.name = col.name;
                     select.id = cellIdBase;
                     select.className = 'form-control';
-                    select.onchange = atualizarEstatisticas;
+                    select.onchange = function() {
+                        handleInputDataChange(unidadeIndex, linhaIndex, col.name, this.value);
+                    };
 
                     const vtrsDisponiveis = vtrsAtivasPorUnidade[unidadeNome] || [];
 
@@ -1126,8 +1233,11 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                         select.appendChild(option);
                     });
                     
-                    // Pré-popular a primeira linha com o primeiro VTR ATIVO disponível para aquela unidade
-                    if (isFirstRow && vtrsDisponiveis.length > 0) {
+                    // Aplica o valor carregado/padrão
+                    select.value = col.value;
+
+                    // Pré-popular a primeira linha se for nova e não tiver dado carregado
+                    if (isFirstRow && !col.value && vtrsDisponiveis.length > 0) {
                         select.value = vtrsDisponiveis[0].vtr;
                         
                         const tipoSelect = row.querySelector(`select[name="tipoServico"]`);
@@ -1160,21 +1270,17 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                         select.appendChild(option);
                     });
                     
+                    select.value = col.value; // Aplica o valor carregado/padrão
+
                     select.onchange = function() {
-                        atualizarEstatisticas(); 
-                        if (col.name === 'empenhoJ' && this.value !== "") {
-                            const inicioInput = document.getElementById(`${unidadeIndex}-${linhaIndex}-inicio`);
-                            if (inicioInput) {
-                                inicioInput.value = getNowFormatted();
-                                inicioInput.dispatchEvent(new Event('change')); 
-                            }
-                        } else if (col.name === 'ultimoJ' && this.value !== "") {
-                            const fimInput = document.getElementById(`${unidadeIndex}-${linhaIndex}-fim`);
-                            if (fimInput) {
-                                fimInput.value = getNowFormatted();
-                                fimInput.dispatchEvent(new Event('change'));
-                            }
+                        // Lógica de pré-preenchimento de data/hora
+                        if (col.name === 'empenhoJ' && this.value !== "" && !document.getElementById(`${unidadeIndex}-${linhaIndex}-inicio`).value) {
+                            document.getElementById(`${unidadeIndex}-${linhaIndex}-inicio`).value = getNowFormatted();
+                        } else if (col.name === 'ultimoJ' && this.value !== "" && !document.getElementById(`${unidadeIndex}-${linhaIndex}-fim`).value) {
+                            document.getElementById(`${unidadeIndex}-${linhaIndex}-fim`).value = getNowFormatted();
                         }
+                         // Atualizar os dados após a alteração
+                        handleInputDataChange(unidadeIndex, linhaIndex, col.name, this.value);
                     };
                     cell.appendChild(select);
 
@@ -1194,6 +1300,65 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 }
             });
         }
+
+        // NOVO: Coleta todos os dados do DOM da Tela 2 e popula o array global `registrosEmpenhos`
+        function coletarDadosPlanilhas() {
+            registrosEmpenhos = [];
+            dadosRegistro.unidades.forEach((unidade, unidadeIndex) => {
+                const tbody = document.getElementById(`tbody-${unidadeIndex}`);
+                if (!tbody) return;
+
+                Array.from(tbody.rows).forEach(row => {
+                    const data = {
+                        unidade: unidade,
+                        vtr: row.querySelector(`select[name="vtr"]`)?.value || "",
+                        tipoServico: row.querySelector(`select[name="tipoServico"]`)?.value || "",
+                        empenhoJ: row.querySelector(`select[name="empenhoJ"]`)?.value || "",
+                        inicio: row.querySelector(`input[name="inicio"]`)?.value || "",
+                        fim: row.querySelector(`input[name="fim"]`)?.value || "",
+                        protocolo: row.querySelector(`input[name="protocolo"]`)?.value || "",
+                        natureza: row.querySelector(`input[name="natureza"]`)?.value || "",
+                        ultimoJ: row.querySelector(`select[name="ultimoJ"]`)?.value || "",
+                    };
+                    
+                    // Adicionar apenas linhas que tenham alguma informação relevante preenchida
+                    if (data.vtr || data.empenhoJ || data.protocolo || data.natureza) {
+                         registrosEmpenhos.push(data);
+                    }
+                });
+            });
+        }
+        
+        // NOVO: Aplica os dados do array global `registrosEmpenhos` no DOM da Tela 2
+        function aplicarDadosPlanilhas() {
+            // Agrupa os dados salvos por unidade para facilitar a aplicação
+            const dadosAgrupados = registrosEmpenhos.reduce((acc, reg) => {
+                if (!acc[reg.unidade]) {
+                    acc[reg.unidade] = [];
+                }
+                acc[reg.unidade].push(reg);
+                return acc;
+            }, {});
+
+            dadosRegistro.unidades.forEach((unidade, unidadeIndex) => {
+                const tbody = document.getElementById(`tbody-${unidadeIndex}`);
+                if (!tbody) return;
+                
+                tbody.innerHTML = ''; // Limpa antes de reconstruir
+                
+                const dadosUnidade = dadosAgrupados[unidade] || [];
+
+                if (dadosUnidade.length > 0) {
+                    dadosUnidade.forEach((data, linhaIndex) => {
+                        criarLinhaRegistro(unidadeIndex, linhaIndex, tbody, unidade, data, false);
+                    });
+                } else {
+                    // Adiciona uma linha vazia padrão se não houver dados
+                    criarLinhaRegistro(unidadeIndex, 0, tbody, unidade, {}, true); 
+                }
+            });
+        }
+
 
         function gerarPlanilhas(unidades) {
             const container = document.getElementById('planilhas-container');
@@ -1237,18 +1402,28 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                     </button>
                 `;
                 container.appendChild(section);
-
-                const tbody = document.getElementById(`tbody-${index}`);
-                criarLinhaRegistro(index, 0, tbody, unidade, true); 
+                
+                // Popula com dados vazios, se não houver dados salvos no registrosEmpenhos
+                if (!registrosEmpenhos.some(r => r.unidade === unidade)) {
+                    const tbody = document.getElementById(`tbody-${index}`);
+                    criarLinhaRegistro(index, 0, tbody, unidade, {}, true); 
+                }
             });
 
             document.querySelectorAll('.btn-add-row').forEach(button => {
                 button.addEventListener('click', function() {
-                    const unitIndex = this.getAttribute('data-unit-index');
+                    // 1. Salvar os dados ATUAIS do DOM antes de adicionar nova linha
+                    coletarDadosPlanilhas(); 
+                    
+                    // 2. Adicionar uma nova linha no array global
                     const unidadeNome = this.getAttribute('data-unit-name');
-                    const tbody = document.getElementById(`tbody-${unitIndex}`);
-                    const newRowIndex = tbody.rows.length; 
-                    criarLinhaRegistro(unitIndex, newRowIndex, tbody, unidadeNome, false); 
+                    registrosEmpenhos.push({ unidade: unidadeNome, vtr: "", tipoServico: "", empenhoJ: "", inicio: "", fim: "", protocolo: "", natureza: "", ultimoJ: "" });
+                    
+                    // 3. Aplicar/Reconstruir as planilhas do array global
+                    aplicarDadosPlanilhas(); 
+
+                    // 4. Salvar
+                    salvarRegistrosNoLocalStorage(); 
                     atualizarEstatisticas();
                 });
             });
@@ -1276,40 +1451,36 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
         }
 
         function atualizarEstatisticas() {
-            // ... (Função atualizarEstatisticas mantida, omitida por brevidade) ...
+            // Garante que o array de registros esteja atualizado
+            coletarDadosPlanilhas();
             
             const estatisticas = { empenhos: {}, vtrPorUnidade: {}, totalVTRs: 0, protocolosENaturezas: [] };
 
-            dadosRegistro.unidades.forEach((unidade, unidadeIndex) => {
-                const tbody = document.getElementById(`tbody-${unidadeIndex}`);
-                if (!tbody) return;
+            // Itera sobre o array persistente
+            registrosEmpenhos.forEach(registro => {
+                const unidade = registro.unidade;
+                
+                if (registro.empenhoJ && registro.empenhoJ !== "") {
+                    estatisticas.empenhos[registro.empenhoJ] = (estatisticas.empenhos[registro.empenhoJ] || 0) + 1;
+                }
 
-                let vtrCount = 0;
+                if (registro.vtr && registro.vtr.trim() !== "") {
+                    estatisticas.vtrPorUnidade[unidade] = (estatisticas.vtrPorUnidade[unidade] || 0) + 1;
+                }
 
-                Array.from(tbody.rows).forEach(row => {
-                    const empenhoSelect = row.querySelector(`select[name="empenhoJ"]`);
-                    const vtrSelect = row.querySelector(`select[name="vtr"]`); 
-                    const protocoloInput = row.querySelector(`input[name="protocolo"]`);
-                    const naturezaInput = row.querySelector(`input[name="natureza"]`);
-
-                    if (empenhoSelect && empenhoSelect.value && empenhoSelect.value !== "") {
-                        estatisticas.empenhos[empenhoSelect.value] = (estatisticas.empenhos[empenhoSelect.value] || 0) + 1;
-                    }
-
-                    if (vtrSelect && vtrSelect.value.trim() !== "") {
-                        vtrCount++;
-                    }
-
-                    const proto = protocoloInput?.value.trim();
-                    const nat = naturezaInput?.value.trim();
-                    if (proto && nat) {
-                        estatisticas.protocolosENaturezas.push({ protocolo: proto, natureza: nat });
-                    }
-                });
-
-                estatisticas.vtrPorUnidade[unidade] = vtrCount;
-                estatisticas.totalVTRs += vtrCount;
+                const proto = registro.protocolo.trim();
+                const nat = registro.natureza.trim();
+                if (proto && nat) {
+                    estatisticas.protocolosENaturezas.push({ 
+                        protocolo: proto, 
+                        natureza: nat, 
+                        unidade: unidade, // NOVO: Adicionado Unidade
+                        vtr: registro.vtr || 'Não Informado' // NOVO: Adicionado VTR
+                    });
+                }
             });
+            
+            estatisticas.totalVTRs = Object.values(estatisticas.vtrPorUnidade).reduce((acc, curr) => acc + curr, 0);
 
             let html = '';
             html += '<h3>Empenhos J Utilizados</h3>';
@@ -1325,7 +1496,7 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 html += `<ul>${empenhoList}</ul>`;
             }
 
-            html += '<h3>VTRs Registrados</h3>';
+            html += '<h3>VTRs Registrados (Com pelo menos um Empenho/VTR selecionado)</h3>';
             if (estatisticas.totalVTRs === 0) {
                 html += '<p>Nenhum VTR registrado ainda.</p>';
             } else {
@@ -1337,43 +1508,18 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 html += '</ul>';
             }
 
+            // Estatísticas de Ocorrências com VTR e Unidade
             html += '<h3>Ocorrências Registradas (Protocolo + Natureza)</h3>';
             if (estatisticas.protocolosENaturezas.length === 0) {
                 html += '<p>Nenhuma ocorrência registrada ainda.</p>';
             } else {
                 const ocorrenciasList = estatisticas.protocolosENaturezas
-                    .map(item => `<li><strong>${item.protocolo}</strong> – ${item.natureza}</li>`)
+                    .map(item => `<li><strong>[${item.unidade} | ${item.vtr}]</strong> - ${item.protocolo} – ${item.natureza}</li>`)
                     .join('');
                 html += `<ul>${ocorrenciasList}</ul>`;
             }
 
             document.getElementById('estatisticas-conteudo').innerHTML = html;
-        }
-
-        // Função para atualizar os dados da planilha na segunda tela
-        function atualizarDadosPlanilha() {
-            const dadosPlanilhaInput = document.getElementById('dadosPlanilhaUpdate');
-            const errorSpan = document.getElementById('dadosPlanilhaUpdateError');
-
-            if (!dadosPlanilhaInput.value.trim()) {
-                errorSpan.style.display = 'block';
-                return;
-            }
-            errorSpan.style.display = 'none';
-
-            processarDadosPlanilha(dadosPlanilhaInput.value); // Reprocessa e atualiza vtrsAtivasPorUnidade e guarnicoesCompletas
-            
-            // Atualiza a exibição de VTRs ativas na info-box
-            document.getElementById('info-vtrs-ativas').textContent = 
-                Object.values(vtrsAtivasPorUnidade).flat().map(d => d.vtr).join(', ') || 'Nenhuma viatura detectada.';
-
-            // Regenera as planilhas para que os dropdowns de VTR sejam atualizados
-            if (dadosRegistro.unidades) {
-                gerarPlanilhas(dadosRegistro.unidades); 
-            }
-
-            alert('Dados da planilha de guarnição atualizados com sucesso!');
-            dadosPlanilhaInput.value = ''; // Limpa o campo após atualização
         }
 
 
@@ -1387,11 +1533,6 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             if (storedGuarnicoes) {
                 guarnicoesCompletas = JSON.parse(storedGuarnicoes);
             }
-        }
-
-        // Salvar guarnições no localStorage
-        function salvarGuarnicoesNoLocalStorage() {
-            localStorage.setItem('guarnicoesCompletas', JSON.stringify(guarnicoesCompletas));
         }
 
         function renderizarGuarnicoesTable() {
@@ -1409,7 +1550,6 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             }, {});
 
             // 2. Renderizar a tabela
-            let index = 0; // Índice real para atualização de dados
             
             Object.keys(guarnicoesAgrupadas).sort().forEach(unidade => {
                 // Adiciona linha de cabeçalho da unidade
@@ -1432,7 +1572,6 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                             <button type="button" class="btn-delete-row" onclick="excluirGuarnicao(${originalIndex})">X Excluir</button>
                         </td>
                     `;
-                    index++;
                 });
             });
         }
@@ -1440,6 +1579,7 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
         function atualizarGuarnicao(index, campo, valor) {
             if (guarnicoesCompletas[index]) {
                 guarnicoesCompletas[index][campo] = valor;
+                salvarGuarnicoesNoLocalStorage(); // Salva a alteração imediatamente
             }
         }
 
@@ -1470,7 +1610,7 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 addUnidade.value = '';
                 addNome.value = '';
                 addTelefone.value = '';
-                alert('Guarnição adicionada com sucesso!');
+                alert('Guarnição adicionada com sucesso! Lembre-se que você deve salvar a Guarnição Manual para que ela também apareça nos dropdowns da Tela de Registro.');
             } else {
                 alert('VTR e Unidade são campos obrigatórios para adicionar uma guarnição.');
             }
@@ -1486,8 +1626,22 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
         }
 
         function salvarGuarnicoes() {
+            // Re-processa guarnicoesCompletas para atualizar vtrsAtivasPorUnidade na Tela 2
+            vtrsAtivasPorUnidade = guarnicoesCompletas.reduce((acc, curr) => {
+                const unidadeKey = curr.unidade;
+                if (!acc[unidadeKey]) {
+                    acc[unidadeKey] = [];
+                }
+                if (!acc[unidadeKey].some(item => item.vtr === curr.vtr)) {
+                    // Nota: O tipo de serviço é perdido aqui, mas será um dropdown na tela 2
+                    acc[unidadeKey].push({ vtr: curr.vtr, tipoServico: 'ORDINARIO' }); 
+                }
+                return acc;
+            }, {});
+            
+            salvarDadosIniciais(); // Salva as VTRs ativas atualizadas
             salvarGuarnicoesNoLocalStorage();
-            alert('Guarnições salvas com sucesso!');
+            alert('Guarnições salvas e VTRs atualizadas para a Tela de Registro!');
         }
 
 
@@ -1496,6 +1650,9 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
         /* ==================================== */
 
         async function gerarPDF() {
+            // Coleta os dados em tempo real antes de exportar
+            coletarDadosPlanilhas();
+            
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4'); // 'p' for portrait, 'mm' for millimeters, 'a4' for A4 size
 
@@ -1523,6 +1680,7 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 tempDiv.style.backgroundColor = 'white';
                 tempDiv.style.border = '1px solid #ccc';
                 
+                // Usamos a tabela do DOM, mas a reformatamos para impressão
                 const guarnicoesTableClone = document.getElementById('guarnicoesTable').cloneNode(true);
                 
                 // Remover coluna e botões de Ação/Excluir (5ª coluna)
@@ -1550,14 +1708,21 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                         if (planilhaElement) {
                             const planilhaClone = planilhaElement.cloneNode(true);
                              // Remove botões e a seção de Adicionar na cópia
-                            planilhaClone.querySelector('.btn-add-row').remove();
+                            const btnAdd = planilhaClone.querySelector('.btn-add-row');
+                            if(btnAdd) btnAdd.remove();
                             
-                             // Remove a coluna de Ação na tabela clonada
+                             // Remove a coluna de Ação na tabela clonada e converte inputs/selects em texto
                             planilhaClone.querySelector('table thead tr th:last-child').remove();
                             planilhaClone.querySelectorAll('table tbody tr').forEach(row => {
                                 if (row.querySelector('.delete-cell')) {
                                     row.querySelector('.delete-cell').remove();
                                 }
+                                
+                                // Converte INPUTS e SELECTS para texto para exportação
+                                row.querySelectorAll('input, select').forEach(element => {
+                                    const value = element.tagName === 'SELECT' ? element.options[element.selectedIndex].textContent : element.value;
+                                    element.parentNode.textContent = value;
+                                });
                             });
                             
                             elementsToPrint.push(planilhaClone);
@@ -1583,6 +1748,14 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                 const element = elementsToPrint[i];
                 const title = titles[i];
                 
+                // Adiciona uma nova página se for o segundo elemento e não houver espaço
+                 if (i > 0 && yOffset > pageHeight - margin - 30) {
+                    doc.addPage();
+                    yOffset = margin + 10; // Espaço para o novo título
+                } else if (i > 0) {
+                    yOffset += 10; // Espaço entre os elementos na mesma página
+                }
+
                 doc.setFontSize(16);
                 doc.text(title, pageWidth / 2, yOffset, { align: 'center' });
                 yOffset += 10;
@@ -1604,19 +1777,15 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                         const printHeight = Math.min(heightLeft, pageHeight - currentY - margin);
                         const sY = imgHeight - heightLeft;
 
-                        doc.addImage(imgData, 'PNG', margin, currentY, imgWidth, imgHeight, null, null, null, null, sY/imgHeight);
+                        // doc.addImage(imgData, 'PNG', margin, currentY, imgWidth, printHeight, null, null, null, null, 0, sY); // Este modo não funciona bem para tabelas grandes
+                        doc.addImage(imgData, 'PNG', margin, currentY, imgWidth, imgHeight, null, 'FAST', sY/imgHeight);
                         
                         currentY += printHeight;
                         heightLeft -= printHeight;
                     }
 
-                    yOffset = currentY + 10; // Atualiza o offset para o próximo elemento
+                    yOffset = currentY; // Atualiza o offset para o próximo elemento
                 });
-
-                if (i < elementsToPrint.length - 1 && yOffset > pageHeight - margin) { 
-                    doc.addPage();
-                    yOffset = margin;
-                }
             }
             
             doc.save(filename);
@@ -1625,19 +1794,33 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
 
         // Função para exportar dados para CSV (compatível com Excel)
         function exportarParaExcel() {
+             // Coleta os dados em tempo real antes de exportar
+            coletarDadosPlanilhas();
+            
             const scope = document.getElementById('export-scope-select').value;
             let csvData = [];
             let filename = `Export_${scope}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
 
             if (scope === 'statistics_guarnicoes' || scope === 'statistics' || scope === 'all') {
-                // Exportar Estatísticas
+                // Exportar Estatísticas (Texto plano, difícil de formatar em CSV, apenas lista)
                 const estatisticasContent = document.getElementById('estatisticas-conteudo').innerText;
                 if (estatisticasContent) {
                     csvData.push("=======================================");
                     csvData.push("ESTATÍSTICAS DO REGISTRO");
                     csvData.push("=======================================");
+                    // Formata a lista de ocorrências em uma linha
                     csvData.push(estatisticasContent.replace(/\n\s*\n/g, '\n').replace(/\n/g, ';').trim());
                     csvData.push(""); // Linha em branco
+                    
+                    // Exporta Ocorrências de forma estruturada (NOVO)
+                    if (registrosEmpenhos.length > 0) {
+                         csvData.push("OCORRÊNCIAS REGISTRADAS DETALHADAS");
+                         csvData.push("Unidade;VTR;Protocolo;Natureza");
+                         registrosEmpenhos.filter(r => r.protocolo && r.natureza).forEach(r => {
+                            csvData.push(`${r.unidade};${r.vtr || 'Não Informado'};${r.protocolo};${r.natureza}`);
+                         });
+                         csvData.push("");
+                    }
                 }
             }
 
@@ -1664,18 +1847,25 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                              csvData.push(`${g.vtr};${g.unidade};${g.nome || ''};${g.telefone || ''}`);
                         });
                     });
+                    csvData.push("");
                 }
             }
             
-            // Se for para exportar planilhas individuais ou todas as planilhas
+             // Lógica para exportar Planilhas de Empenho
             if (scope.startsWith('unit-') || scope === 'all') {
-                 // **AVISO:** A exportação das planilhas de empenho em andamento para CSV (que não é o foco principal agora) é complexa,
-                 // pois precisa ler todos os dados dinâmicos dos inputs/selects da tabela. 
-                 // Vamos deixar um aviso, pois o foco era Estatísticas e Guarnições.
-                 if (csvData.length === 0) { // Se não exportou nada ainda
-                    alert("A exportação de planilhas de empenho em andamento para Excel não está totalmente implementada para manter o foco em Estatísticas e Guarnições. Gere o PDF ou exporte apenas as Estatísticas/Guarnições.");
-                    return;
-                 }
+                 // Exporta as Planilhas de Empenho (Tela 2) se houver dados
+                if (registrosEmpenhos.length > 0) {
+                     csvData.push("=======================================");
+                     csvData.push("REGISTROS DE EMPENHOS (J)");
+                     csvData.push("=======================================");
+                     csvData.push("Unidade;VTR;Tipo de Serviço;Empenho J;Início;Fim;Tempo Decorrido;Último J;Protocolo;Natureza");
+                     
+                     registrosEmpenhos.forEach(r => {
+                         const tempo = calcularTempoDecorrido(r.inicio, r.fim);
+                         csvData.push(`${r.unidade};${r.vtr};${r.tipoServico};${r.empenhoJ};${r.inicio};${r.fim};${tempo};${r.ultimoJ};${r.protocolo};${r.natureza}`);
+                     });
+                     csvData.push("");
+                }
             }
             
             if (csvData.length === 0) {
@@ -1705,7 +1895,10 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
 
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('dataHora').value = getNowFormatted();
-            carregarGuarnicoesDoLocalStorage(); // Carrega guarnições salvas
+            
+            carregarGuarnicoesDoLocalStorage(); // Carrega guarnições salvas (Tela 3)
+            carregarDadosIniciais(); // Carrega dadosRegistro e vtrsAtivasPorUnidade (Tela 1/2)
+            carregarDadosIniciais(); // Carrega registrosEmpenhos (Tela 2)
 
             // Event listener para upload de imagem na primeira tela
             document.getElementById('uploadImagem').addEventListener('change', (e) => 
@@ -1757,7 +1950,7 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
             }
             
             if (isValid) {
-                // Processa os dados da planilha
+                // 1. Processa os dados da planilha para VTRs ativas
                 processarDadosPlanilha(dadosPlanilhaInput.value); 
 
                 if (Object.keys(vtrsAtivasPorUnidade).length === 0) {
@@ -1768,12 +1961,19 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                     return; 
                 }
 
+                // 2. Salva os dados de registro
                 dadosRegistro = {
                     nome: nomeInput.value.trim(),
                     dataHora: dataHoraInput.value,
                     unidades: unidadesSelecionadas
                 };
+                salvarDadosIniciais();
 
+                // 3. Inicializa registrosEmpenhos (vazio no início)
+                registrosEmpenhos = [];
+                salvarRegistrosNoLocalStorage();
+
+                // 4. Configura a UI da Tela 2
                 mostrarTela('segunda-tela');
                 
                 document.getElementById('info-nome').textContent = dadosRegistro.nome;
@@ -1786,6 +1986,7 @@ Guarnição Situação Batalhão Unidade Frente de serviço Efetivo Modalidade D
                     Object.values(vtrsAtivasPorUnidade).flat().map(d => d.vtr).join(', ') || 'Nenhuma viatura detectada.';
                 document.getElementById('registro-info').style.display = 'block';
 
+                // 5. Gera as planilhas (em branco, pois registrosEmpenhos está vazio)
                 gerarPlanilhas(dadosRegistro.unidades);
             }
         });
